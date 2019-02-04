@@ -1,0 +1,76 @@
+{
+  "id": "task1",
+  "submission_files": [ "debugNumsFixed.py" ],
+  "points": 18,
+  "category": {
+    "title": "task1",
+    "worth": "",
+    "note_order": [ "0" ],
+    "notes": {
+      "0": {
+        "category": "style",
+        "severity": "minor",
+        "description": "Codder style check failed",
+        "adjust": -0.5
+      }
+    },
+    "children": [
+      {
+        "title": "part1",
+        "worth": "",
+        "notes": {},
+        "children": [
+          {
+            "title": "subpart1",
+            "worth": "",
+            "notes": {},
+            "children": [
+              {
+                "title": "item1",
+                "worth": 2,
+                "notes": {}
+              },
+              {
+                "title": "item2",
+                "worth": 2,
+                "note_order": [ "0" ],
+                "notes": {
+                  "0": {
+                    "category": "behavior",
+                    "severity": "minor",
+                    "description": "Codder output test 'foo' failed.",
+                    "adjust": -0.5
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "title": "subpart2",
+            "worth": 6,
+            "note_order": [ "1", "0" ],
+            "notes": {
+              "0": {
+                "category": "behavior",
+                "severity": "major",
+                "description": "Codder output test 'bar' failed.",
+                "adjust": -3
+              },
+              "1": {
+                "category": "implementation",
+                "severity": "major",
+                "description": "Codder implementation rule 'foo' was broken.",
+                "adjust": -2
+              }
+            }
+          }
+        ]
+      },
+      {
+        "title": "part2",
+        "worth": 10,
+        "notes": {}
+      }
+    ]
+  }
+}

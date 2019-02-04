@@ -1,0 +1,12 @@
+[
+  {
+    "id": "ps01",
+    "title": "Problem Set 1",
+    "tasks": [ "task1", "task2", "task3" ]
+  },
+  {
+    "id": "ps02",
+    "title": "Problem Set 2",
+    "tasks": [ "task1" ]
+  }
+]

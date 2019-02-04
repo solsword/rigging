@@ -1,0 +1,161 @@
+#controls {
+  position: absolute;
+  top: 0pt;
+  height: 12vh;
+  padding-top: 2vh;
+  padding-bottom: 2vh;
+  line-height: 4vh;
+  width: 100%;
+  text-align: center;
+  background: #eee;
+}
+
+div {
+  padding: 1pt;
+}
+
+#submission {
+  position: absolute;
+  top: 12vh;
+  left: 0pt;
+  width: 58vw;
+  padding: 1vw;
+  background: #eee;
+  overflow: scroll;
+}
+
+#evaluation {
+  position: absolute;
+  top: 12vh;
+  right: 0pt;
+  width: 38vw;
+  padding: 1vw;
+  background: #ccc;
+}
+
+.section {
+  /* fixed-size so that we know where to cut off on collapse */
+  margin: 0pt 0pt 0pt 0pt;
+  line-height: 3.2ex;
+  padding: 3pt 0pt 3pt 0pt;
+  border-top: 1pt solid black;
+}
+
+.children .section {
+  margin-left: 0.7em;
+  margin-right: 0pt;
+  padding-right: 0pt;
+  background-color: #bbb;
+}
+
+.section .section .section {
+  background-color: #aaa;
+}
+
+.section .section .section .section {
+  background-color: #999;
+}
+
+.section .section .section .section .section {
+  background-color: #888;
+}
+
+.note-editor {
+  border: 1pt solid black;
+  margin: 2pt;
+  padding: 4pt;
+  background-color: #ffffcc;
+}
+
+.collapse-button {
+  padding: 2pt;
+  text-align: center;
+  width: 16pt;
+  display: inline-block;
+  margin-right: 2pt;
+  margin-left: 3pt;
+  box-sizing: border-box;
+}
+
+.toggle-button {
+  padding: 2pt;
+  text-align: center;
+  width: 16pt;
+  display: inline-block;
+  margin-right: 2pt;
+  margin-left: 3pt;
+  box-sizing: border-box;
+}
+
+.narrow-toggle {
+  padding: 2pt;
+  text-align: center;
+}
+
+.add-button {
+  padding: 2pt;
+  margin-left: 3pt;
+  margin-bottom: 1pt;
+  box-sizing: border-box;
+}
+
+.collapsed {
+  /* Matches section line-height above */
+  height: 3.2ex;
+  overflow: hidden;
+}
+
+.sec-title {
+  font-weight: bold;
+  height: 3.2ex;
+  display: inline-block;
+  margin-bottom: 3pt;
+}
+
+.points {
+  display: block;
+  clear: right; /* TODO: Get rid of this and be careful with height!! */
+  float: right;
+  font-weight: bold;
+  height: 3.2ex;
+  margin: 0pt;
+  margin-right: 3pt;
+}
+
+.points-earned {
+  width: 4em;
+}
+
+.points-worth {
+  width: 4em;
+}
+
+.points-adjust {
+  width: 4em;
+}
+
+.free-value {
+  border: 2pt solid #ddd;
+}
+
+.points-earned.fixed-value {
+  border: 2pt solid #8ad;
+}
+
+.points-worth.fixed-value {
+  border: 2pt solid #a8d;
+}
+
+.disabled {
+  text-decoration: line-through;
+  color: #666;
+}
+
+input.disabled {
+  text-decoration: none;
+  color: #999;
+}
+
+.dialog-buttons {
+  text-align: center;
+}

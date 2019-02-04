@@ -1,0 +1,12 @@
+Rigging
+=======
+
+Grading tool to manage viewing submissions and assigning common rubric items.
+
+Uses flat file-based storage with .json files.
+
+TODO:
+
+* SECURITY
+* Saving results!!!
+* Interfacing online with other tools (e.g., Codder)

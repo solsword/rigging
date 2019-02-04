@@ -1,0 +1,10 @@
+{
+  "id": "task1",
+  "submission_files": [ "testFile.py" ],
+  "points": 20,
+  "category": {
+    "title": "task1",
+    "worth": 20,
+    "notes": {}
+  }
+}
