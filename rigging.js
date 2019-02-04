@@ -1655,6 +1655,9 @@ function create_note_editor(section) {
         common.appendChild(weave_note(new_note, addr, id, false));
       }
 
+      // Update point totals:
+      propagate_points(section);
+
       // Show ourselves out
       editor.parentNode.removeChild(editor);
     }

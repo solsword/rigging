@@ -10,3 +10,4 @@ TODO:
 * SECURITY
 * Saving results!!!
 * Interfacing online with other tools (e.g., Codder)
+* Keyboard shortcuts
