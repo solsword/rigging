@@ -5,9 +5,8 @@
   "category": {
     "title": "task2",
     "worth": "",
-    "notes": {},
     "children": [
-      { "title": "part1", "worth": 20, "notes": {} }
+      { "title": "part1", "worth": 20 }
     ]
   }
 }

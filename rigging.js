@@ -127,6 +127,9 @@ function next_note_id(category) {
    */
   let id=0;
   let notes = category.notes;
+  if (notes == undefined) {
+    return "0";
+  }
   while (notes.hasOwnProperty("" + id)) {
     id += 1;
   }
@@ -162,6 +165,9 @@ function lookup_category(rubric, addr) {
 
 function lookup_note(rubric, addr, id) {
   let cat = lookup_category(rubric, addr);
+  if (cat.notes == undefined) {
+    return undefined;
+  }
   if (cat.notes.hasOwnProperty(id)) {
     return cat.notes[id];
   } else {
@@ -747,6 +753,17 @@ function get_specific_subsection(section) {
   return undefined;
 }
 
+function get_children_subsection(section) {
+  for (let child of section.childNodes) {
+    if (node_has_class(child, "children")) {
+      return child;
+    }
+  }
+  console.warn("Failed to find children subsection in section:");
+  console.warn(section);
+  return undefined;
+}
+
 function get_points_div(section) {
   for (let child of section.childNodes) {
     if (node_has_class(child, "points")) {
@@ -922,7 +939,7 @@ function compute_worth(addr, rubric, skip_cache) {
       + cat.worth + "'!"
       );
     }
-    cache_worth(cat.worth);
+    cache_worth(addr, cat.worth);
     return cat.worth;
   }
   let worth = 0;
@@ -931,7 +948,7 @@ function compute_worth(addr, rubric, skip_cache) {
       worth += compute_worth(addr + "." + child.title, rubric, skip_cache - 1);
     }
   }
-  cache_worth(worth);
+  cache_worth(addr, worth);
   return worth;
 }
 
@@ -947,7 +964,7 @@ function compute_earned(addr, rubric, feedback, skip_cache) {
     skip_cache = 0;
   }
   if (
-    !skip_cache
+    skip_cache <= 0
  && POINTS.hasOwnProperty(addr)
  && POINTS[addr].hasOwnProperty("earned")
   ) {
@@ -955,12 +972,12 @@ function compute_earned(addr, rubric, feedback, skip_cache) {
   }
   if (feedback.overrides.hasOwnProperty(addr)) {
     let result = feedback.overrides[addr];
-    cache_earned(result);
+    cache_earned(addr, result);
     return result;
   }
   // Look up the category and it's worth:
   let cat = lookup_category(rubric, addr);
-  let worth = compute_worth(addr, rubric);
+  let worth = compute_worth(addr, rubric, skip_cache);
 
   // Figure out the default point value:
   let points = 0;
@@ -1007,7 +1024,7 @@ function compute_earned(addr, rubric, feedback, skip_cache) {
   if (points < 0) {
     points = 0;
   }
-  cache_earned(points);
+  cache_earned(addr, points);
   return points;
 }
 
@@ -1305,18 +1322,24 @@ function weave_category(category, rubric, feedback, prefix) {
   let keylist = category.note_order;
   if (keylist != undefined) {
     for (let id of keylist) {
-      if (cat.notes.hasOwnProperty(id)) {
-        let note = cat.notes[id];
-        let disabled = true;
-        if (
-          feedback.notes.hasOwnProperty(address)
-       && feedback.notes[address].hasOwnProperty(id)
-        ) {
-          disabled = false;
-        }
-        notes_here.push(weave_note(note, address, id, disabled));
+      if (cat.notes == undefined) {
+        console.error(
+          "Category '" + address + "' has note_order but no notes!"
+        );
       } else {
-        console.warn("note_orer contains missing note ID '" + id + "'");
+        if (cat.notes.hasOwnProperty(id)) {
+          let note = cat.notes[id];
+          let disabled = true;
+          if (
+            feedback.notes.hasOwnProperty(address)
+         && feedback.notes[address].hasOwnProperty(id)
+          ) {
+            disabled = false;
+          }
+          notes_here.push(weave_note(note, address, id, disabled));
+        } else {
+          console.error("note_orer contains missing note ID '" + id + "'");
+        }
       }
     }
   }
@@ -1522,6 +1545,7 @@ function weave_note(note, address, id, disabled) {
 
 function create_note_editor(section) {
   let editor = document.createElement("div");
+  editor.classList.add("editor");
   editor.classList.add("note-editor");
 
   // Category select
@@ -1643,7 +1667,13 @@ function create_note_editor(section) {
       } else {
         let category = lookup_category(rubric, addr);
         let id = next_note_id(category);
+        if (category.note_order == undefined) {
+          category.note_order = [];
+        }
         category.note_order.push(id);
+        if (category.notes == undefined) {
+          category.notes = {};
+        }
         category.notes[id] = new_note;
         // Enable the new note:
         if (!feedback.notes.hasOwnProperty(addr)) {
@@ -1684,7 +1714,137 @@ function create_note_editor(section) {
 }
 
 function create_category_editor(section) {
-  console.error("TODO");
-  return document.createTextNode("TODO");
+  let editor = document.createElement("div");
+  editor.classList.add("editor");
+  editor.classList.add("category-editor");
+
+  // Title box
+  let title = document.createElement("input");
+  title.classList.add("sec-title");
+  title.type = "text";
+  title.value = "?";
+  editor.appendChild(document.createTextNode("Title: "));
+  editor.appendChild(title);
+  editor.appendChild(document.createElement("br"));
+
+  // Auto checkbox
+  let autobox = document.createElement("input");
+  autobox.classList.add("toggle-button");
+  autobox.classList.add("auto-worth-option");
+  autobox.type = "checkbox";
+  autobox.checked = false;
+  editor.appendChild(autobox);
+  editor.appendChild(document.createTextNode("Determine value from children"));
+  editor.appendChild(document.createElement("br"));
+
+  // Parent auto checkbox
+  let parent_autobox = document.createElement("input");
+  parent_autobox.classList.add("toggle-button");
+  parent_autobox.classList.add("parent-auto-worth-option");
+  parent_autobox.type = "checkbox";
+  parent_autobox.checked = true;
+  editor.appendChild(parent_autobox);
+  editor.appendChild(
+    document.createTextNode("Determine parent value from children")
+  );
+  editor.appendChild(document.createElement("br"));
+
+  // Points box
+  let points_div = document.createElement("div");
+  let points = document.createElement("input");
+  points.classList.add("points-adjust");
+  points.type = "text";
+  points.value = "1";
+  points_div.appendChild(document.createTextNode("Worth: "));
+  points_div.appendChild(points);
+  editor.appendChild(points_div);
+
+  // Points box hides if it's irrelevant
+  function points_are_relevant() {
+    return !autobox.checked;
+  }
+
+  function hide_points_if_irrelevant() {
+    if (!points_are_relevant()) {
+      points_div.style.display = "none";
+    } else {
+      points_div.style.display = "block";
+    }
+  }
+
+  autobox.addEventListener("change", hide_points_if_irrelevant);
+
+  // Buttons
+  let buttons = document.createElement("div");
+  buttons.classList.add("dialog-buttons");
+
+  // Create button
+  let create = document.createElement("input");
+  create.classList.add("add-button");
+  create.type = "button";
+  create.value = "add";
+  create.addEventListener(
+    "click",
+    function () {
+      // Create base note object
+      let new_category = { "title": title.value };
+
+      // Set worth
+      if (points_are_relevant()) {
+        let pv = parseFloat(points.value);
+        if (isNaN(pv)) {
+          pv = "";
+        }
+        new_category.worth = pv;
+      } else {
+        new_category.worth = ""; // auto from children
+      }
+
+      // Figure out where this note is going:
+      let addr = section.__address__;
+      let feedback = section.__feedback__;
+      let rubric = section.__rubric__;
+
+      // Create the new note in the rubric or feedback:
+      let category = lookup_category(rubric, addr);
+      if (parent_autobox.checked) {
+        category.worth = "";
+      }
+      if (!category.hasOwnProperty("children")) {
+        category.children = [];
+      }
+      category.children.push(new_category);
+
+      let children_span = get_children_subsection(section);
+      children_span.appendChild(
+        weave_category(new_category, rubric, feedback, addr)
+      );
+
+      // Update point totals:
+      propagate_points(section);
+
+      // Show ourselves out
+      editor.parentNode.removeChild(editor);
+    }
+  );
+  buttons.appendChild(create);
+
+  // Cancel button
+  let cancel = document.createElement("input");
+  cancel.classList.add("add-button");
+  cancel.type = "button";
+  cancel.value = "cancel";
+  cancel.addEventListener(
+    "click",
+    function () {
+      // Show ourselves out
+      editor.parentNode.removeChild(editor);
+    }
+  );
+  buttons.appendChild(cancel);
+
+  editor.appendChild(buttons);
+
+  return editor;
 }
 

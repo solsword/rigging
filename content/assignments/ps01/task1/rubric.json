@@ -18,17 +18,14 @@
       {
         "title": "part1",
         "worth": "",
-        "notes": {},
         "children": [
           {
             "title": "subpart1",
             "worth": "",
-            "notes": {},
             "children": [
               {
                 "title": "item1",
-                "worth": 2,
-                "notes": {}
+                "worth": 2
               },
               {
                 "title": "item2",
@@ -68,8 +65,7 @@
       },
       {
         "title": "part2",
-        "worth": 10,
-        "notes": {}
+        "worth": 10
       }
     ]
   }
