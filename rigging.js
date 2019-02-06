@@ -3,9 +3,19 @@ var ASG_INFO = undefined;
 var RUBRICS = {};
 var FEEDBACK = {};
 var SUBMISSIONS = {};
+
 var POINTS = {};
 var CURRENTLY_DISPLAYED = undefined;
 var BASE_PATH = "content"
+
+// Callback queues
+var QUEUES = {
+  "roster": undefined,
+  "asg_info": undefined,
+  "rubrics": {},
+  "feedback": {},
+  "submissions": {}
+};
 
 var CATEGORIES = [
   "crash",
@@ -66,7 +76,10 @@ window.onload = function() {
 function with_asg_info(callback) {
   if (ASG_INFO) {
     callback(ASG_INFO);
+  } else if (QUEUES.asg_info != undefined) {
+    QUEUES.asg_info.push(callback);
   } else {
+    QUEUES.asg_info = [callback];
     load_json(
       "assignments/index.json",
       function (json) {
@@ -78,7 +91,10 @@ function with_asg_info(callback) {
             ASG_STATUS[asg.id][task] = {};
           }
         }
-        callback(ASG_INFO);
+        for (let cb of QUEUES.asg_info) {
+          cb(ASG_INFO);
+        }
+        delete QUEUES["asg_info"];
       }
     );
   }
@@ -90,12 +106,22 @@ function with_asg_info(callback) {
 function with_roster(callback) {
   if (ROSTER) {
     callback(ROSTER);
+  } else if (
+    QUEUES.roster != undefined
+  ) {
+    QUEUES.roster.push(callback);
   } else {
+    QUEUES.roster = [callback];
     load_json(
       "roster.json",
       function (json) {
         ROSTER = json;
-        callback(ROSTER);
+        for (let cb of QUEUES.roster) {
+          cb(ROSTER);
+        }
+        // TODO: Make sure this isn't simultaneous with another with_roster
+        // attempt to add to the roster queue?
+        delete QUEUES["roster"];
       }
     );
   }
@@ -110,12 +136,25 @@ function with_rubric(asg, task, callback) {
   }
   if (RUBRICS[asg].hasOwnProperty(task)) {
     callback(RUBRICS[asg][task]);
+  } else if (
+    QUEUES.rubrics.hasOwnProperty(asg)
+ && QUEUES.rubrics[asg].hasOwnProperty(task)
+  ) {
+    QUEUES.rubrics[asg][task].push(callback);
   } else {
+    if (!QUEUES.rubrics.hasOwnProperty(asg)) {
+      QUEUES.rubrics[asg] = {};
+    }
+    QUEUES.rubrics[asg][task] = [callback];
     load_json(
       "assignments/" + asg + "/" + task + "/rubric.json",
       function (json) {
         RUBRICS[asg][task] = json;
-        callback(json);
+        let queue = QUEUES.rubrics[asg][task];
+        for (let cb of queue) {
+          cb(json);
+        }
+        delete QUEUES.rubrics[asg][task];
       }
     );
   }
@@ -187,13 +226,29 @@ function with_feedback(asg, task, student, callback) {
   }
   if (FEEDBACK[asg][task].hasOwnProperty(student)) {
     callback(FEEDBACK[asg][task][student]);
+  } else if (
+    QUEUES.feedback.hasOwnProperty(asg)
+ && QUEUES.feedback[asg].hasOwnProperty(task)
+ && QUEUES.feedback[asg][task].hasOwnProperty(student)
+  ) {
+    QUEUES.feedback[asg][task][student].push(callback);
   } else {
+    if (!QUEUES.feedback.hasOwnProperty(asg)) {
+      QUEUES.feedback[asg] = {};
+    }
+    if (!QUEUES.feedback.hasOwnProperty(task)) {
+      QUEUES.feedback[asg][task] = {};
+    }
+    QUEUES.feedback[asg][task][student] = [callback];
     let fbpath = "feedback/" + asg + "/" + student + "/" + task + ".json";
     load_json(
       fbpath,
       function (feedback) {
         FEEDBACK[asg][task][student] = feedback;
-        callback(feedback);
+        for (let cb of QUEUES.feedback[asg][task][student]) {
+          cb(feedback);
+        }
+        delete QUEUES.feedback[asg][task][student];
       },
       function(category, error) {
         let feedback = {
@@ -206,7 +261,10 @@ function with_feedback(asg, task, student, callback) {
           "specific": []
         };
         FEEDBACK[asg][task][student] = feedback;
-        callback(feedback);
+        for (let cb of QUEUES.feedback[asg][task][student]) {
+          cb(feedback);
+        }
+        delete QUEUES.feedback[asg][task][student];
       }
     );
   }
@@ -224,7 +282,21 @@ function with_submission(asg, task, student, callback) {
   }
   if (SUBMISSIONS[asg][task].hasOwnProperty(student)) {
     callback(SUBMISSIONS[asg][task][student]);
+  } else if (
+    QUEUES.submissions.hasOwnProperty(asg)
+ && QUEUES.submissions[asg].hasOwnProperty(task)
+ && QUEUES.submissions[asg][task].hasOwnProperty(student)
+  ) {
+    QUEUES.submissions[asg][task][student].push(callback);
   } else {
+    if (!QUEUES.submissions.hasOwnProperty(asg)) {
+      QUEUES.submissions[asg] = {};
+    }
+    if (!QUEUES.submissions.hasOwnProperty(task)) {
+      QUEUES.submissions[asg][task] = {};
+    }
+    QUEUES.submissions[asg][task][student] = [callback];
+
     with_rubric(
       asg,
       task,
@@ -239,8 +311,7 @@ function with_submission(asg, task, student, callback) {
               task,
               student,
               rubric,
-              feedback,
-              callback
+              feedback
             );
           }
         );
@@ -254,8 +325,7 @@ function continue_loading_submission(
   task,
   student,
   rubric,
-  feedback,
-  callback
+  feedback
 ) {
   let submission_info = {
     "status": "complete",
@@ -291,8 +361,7 @@ function continue_loading_submission(
             student,
             rubric,
             feedback,
-            submission_info,
-            callback
+            submission_info
           );
         }
       },
@@ -316,8 +385,7 @@ function continue_loading_submission(
             student,
             rubric,
             feedback,
-            submission_info,
-            callback
+            submission_info
           );
         }
       }
@@ -331,8 +399,7 @@ function finalize_submission_info(
   student,
   rubric,
   feedback,
-  submission_info,
-  callback
+  submission_info
 ) {
   let all_submitted = true;
   let none_submitted = true;
@@ -364,24 +431,12 @@ function finalize_submission_info(
     feedback.progress = "fresh";
   }
   SUBMISSIONS[asg][task][student] = submission_info;
-  callback(submission_info);
-}
-
-
-/*
- * Looks up assignment info (if only asg is defined), task info (if asg and
- * task are defined) or submission info (if asg, task, and student are defined)
- * and passes the resulting info dict to the given callback.
- */
-function with_cached_info(asg, task, student, callback) {
-  if (task == undefined && student == undefined) {
-    with_asg_info(function (asg_info) { callback(asg_info[asg]); });
-  } else if (student == undefined) {
-    with_rubric(asg, task, callback);
-  } else {
-    with_submission(asg, task, student, callback);
+  for (let cb of QUEUES.submissions[asg][task][student]) {
+    cb(submission_info);
   }
+  delete QUEUES.submissions[asg][task][student];
 }
+
 
 function load_file(path, callback, errorfn, mime_type) {
   let xobj = new XMLHttpRequest();
@@ -424,10 +479,8 @@ function load_file(path, callback, errorfn, mime_type) {
     xobj.send(null);
   } catch (e) {
     if (errorfn) {
-      console.log("ERF");
       errorfn("JAVASCRIPT", e)
     } else {
-      console.log("NERF");
       console.error(
         "Failed to load file '" + path + "' (-> '" + target + "')"
       );
@@ -495,6 +548,30 @@ function init_controls(asg_info) {
       toggle_rubric_state(eval, !lock_rubric.checked);
     }
   );
+
+  let save_button = document.getElementById("save_changes");
+  save_button.addEventListener(
+    "click",
+    function () {
+      alert("TODO: Saving does not work yet!");
+    }
+  );
+
+  let dump_button = document.getElementById("dump_json");
+  dump_button.addEventListener(
+    "click",
+    function () {
+      document.body.appendChild(create_dump_dialog());
+    }
+  );
+
+  let restore_button = document.getElementById("restore_from_json");
+  restore_button.addEventListener(
+    "click",
+    function () {
+      document.body.appendChild(create_restore_dialog());
+    }
+  );
 }
 
 function select_assignment(evt) {
@@ -531,6 +608,24 @@ function update_which() {
         }
       );
     }
+  }
+}
+
+function refresh_display() {
+  if (CURRENTLY_DISPLAYED == undefined) {
+    return; // do nothing
+  } else {
+    let asg = CURRENTLY_DISPLAYED.asg;
+    let task = CURRENTLY_DISPLAYED.task;
+    let student = CURRENTLY_DISPLAYED.student;
+    with_submission(
+      CURRENTLY_DISPLAYED.asg,
+      CURRENTLY_DISPLAYED.task,
+      CURRENTLY_DISPLAYED.student,
+      function (sub) {
+        display_submission(sub);
+      }
+    );
   }
 }
 
@@ -894,11 +989,11 @@ function current_worth(node) {
   }
 }
 
-function child_categories(category) {
+function clear_points_cache() {
   /*
-   * Returns an array of the names of all child categories of the given
-   * category.
+   * Clears out the points earned/worth cache entirely.
    */
+  POINTS = {};
 }
 
 function cache_earned(addr, earned) {
@@ -1423,7 +1518,7 @@ function weave_category(category, rubric, feedback, prefix) {
 
   // Add note button:
   let add_note = document.createElement("input");
-  add_note.classList.add("add-button");
+  add_note.classList.add("dialog-button");
   add_note.classList.add("add-common");
   add_note.type = "button";
   add_note.value = "+ note";
@@ -1440,7 +1535,7 @@ function weave_category(category, rubric, feedback, prefix) {
 
   // Add category button:
   let add_category = document.createElement("input");
-  add_category.classList.add("add-button");
+  add_category.classList.add("dialog-button");
   add_category.classList.add("add-category");
   add_category.type = "button";
   add_category.value = "+ category";
@@ -1543,6 +1638,85 @@ function weave_note(note, address, id, disabled) {
   return note_div;
 }
 
+function create_confirm_buttons(element, on_confirm) {
+  /*
+   * Creates confirm/cancel buttons for the given element, with the given
+   * callback to occur (receiving the element as an argument) if the user
+   * confirms. Both buttons remove the element from its parent.
+   */
+
+  // Buttons
+  let buttons = document.createElement("div");
+  buttons.classList.add("dialog-buttons");
+
+  // Confirm button
+  let confirm = document.createElement("input");
+  confirm.classList.add("dialog-button");
+  confirm.type = "button";
+  confirm.value = "confirm";
+  confirm.addEventListener(
+    "click",
+    function () {
+      // Call the callback
+      on_confirm(element);
+
+      // Show ourselves out
+      element.parentNode.removeChild(element);
+    }
+  );
+  buttons.appendChild(confirm);
+
+  // Cancel button
+  let cancel = document.createElement("input");
+  cancel.classList.add("dialog-button");
+  cancel.type = "button";
+  cancel.value = "cancel";
+  cancel.addEventListener(
+    "click",
+    function () {
+      // Show ourselves out
+      element.parentNode.removeChild(element);
+    }
+  );
+
+  buttons.appendChild(cancel);
+
+  return buttons;
+}
+
+function create_done_button(element, on_done) {
+  /*
+   * Creates done button for the given element, with the given callback (if
+   * any)to occur (receiving the element as an argument) when the user clicks
+   * it. The button removes the element from its parent after the callback.
+   */
+
+  // Buttons
+  let buttons = document.createElement("div");
+  buttons.classList.add("dialog-buttons");
+
+  // Done button
+  let done = document.createElement("input");
+  done.classList.add("dialog-button");
+  done.type = "button";
+  done.value = "done";
+  done.addEventListener(
+    "click",
+    function () {
+      // Call the callback
+      if (on_done != undefined) {
+        on_done(element);
+      }
+
+      // Show ourselves out
+      element.parentNode.removeChild(element);
+    }
+  );
+  buttons.appendChild(done);
+
+  return buttons;
+}
+
 function create_note_editor(section) {
   let editor = document.createElement("div");
   editor.classList.add("editor");
@@ -1621,94 +1795,67 @@ function create_note_editor(section) {
   editor.appendChild(document.createTextNode("Add to rubric"));
   editor.appendChild(document.createElement("br"));
 
-  // Buttons
-  let buttons = document.createElement("div");
-  buttons.classList.add("dialog-buttons");
+  // Confirm/cancel buttons
+  editor.appendChild(
+    create_confirm_buttons(
+      editor,
+      function () {
+        // Create base note object
+        let new_note = {
+          "category": cat_select.value,
+          "severity": sev_select.value,
+          "description": desc.value
+        };
 
-  // Create button
-  let create = document.createElement("input");
-  create.classList.add("add-button");
-  create.type = "button";
-  create.value = "add";
-  create.addEventListener(
-    "click",
-    function () {
-      // Create base note object
-      let new_note = {
-        "category": cat_select.value,
-        "severity": sev_select.value,
-        "description": desc.value
-      };
+        // Set points
+        if (points_are_relevant()) {
+          let pv = parseFloat(points.value);
+          if (isNaN(pv)) {
+            pv = 0;
+          }
+          new_note.adjust = pv;
+        } // else no "adjust" key
 
-      // Set points
-      if (points_are_relevant()) {
-        let pv = parseFloat(points.value);
-        if (isNaN(pv)) {
-          pv = 0;
+        // Figure out where this note is going:
+        let specific = !spec_box.checked;
+        let addr = section.__address__;
+        let feedback = section.__feedback__;
+        let rubric = section.__rubric__;
+
+        // Create the new note in the rubric or feedback:
+        if (specific) { // add it to specific notes in feedback
+          new_note.item = addr;
+          feedback.specific.push(new_note);
+
+          // Add a div to our section:
+          let specific = get_specific_subsection(section);
+          specific.appendChild(weave_note(new_note, addr, undefined, false));
+        } else {
+          let category = lookup_category(rubric, addr);
+          let id = next_note_id(category);
+          if (category.note_order == undefined) {
+            category.note_order = [];
+          }
+          category.note_order.push(id);
+          if (category.notes == undefined) {
+            category.notes = {};
+          }
+          category.notes[id] = new_note;
+          // Enable the new note:
+          if (!feedback.notes.hasOwnProperty(addr)) {
+            feedback.notes[addr] = {};
+          }
+          feedback.notes[addr][id] = 1;
+
+          let common = get_common_subsection(section);
+          common.appendChild(weave_note(new_note, addr, id, false));
         }
-        new_note.adjust = pv;
-      } // else no "adjust" key
 
-      // Figure out where this note is going:
-      let specific = !spec_box.checked;
-      let addr = section.__address__;
-      let feedback = section.__feedback__;
-      let rubric = section.__rubric__;
-
-      // Create the new note in the rubric or feedback:
-      if (specific) { // add it to specific notes in feedback
-        new_note.item = addr;
-        feedback.specific.push(new_note);
-
-        // Add a div to our section:
-        let specific = get_specific_subsection(section);
-        console.log(specific.lastChild);
-        specific.appendChild(weave_note(new_note, addr, undefined, false));
-      } else {
-        let category = lookup_category(rubric, addr);
-        let id = next_note_id(category);
-        if (category.note_order == undefined) {
-          category.note_order = [];
-        }
-        category.note_order.push(id);
-        if (category.notes == undefined) {
-          category.notes = {};
-        }
-        category.notes[id] = new_note;
-        // Enable the new note:
-        if (!feedback.notes.hasOwnProperty(addr)) {
-          feedback.notes[addr] = {};
-        }
-        feedback.notes[addr][id] = 1;
-
-        let common = get_common_subsection(section);
-        common.appendChild(weave_note(new_note, addr, id, false));
+        // Update point totals:
+        propagate_points(section);
       }
-
-      // Update point totals:
-      propagate_points(section);
-
-      // Show ourselves out
-      editor.parentNode.removeChild(editor);
-    }
+    )
   );
-  buttons.appendChild(create);
-
-  // Cancel button
-  let cancel = document.createElement("input");
-  cancel.classList.add("add-button");
-  cancel.type = "button";
-  cancel.value = "cancel";
-  cancel.addEventListener(
-    "click",
-    function () {
-      // Show ourselves out
-      editor.parentNode.removeChild(editor);
-    }
-  );
-  buttons.appendChild(cancel);
-
-  editor.appendChild(buttons);
 
   return editor;
 }
@@ -1774,77 +1921,343 @@ function create_category_editor(section) {
 
   autobox.addEventListener("change", hide_points_if_irrelevant);
 
-  // Buttons
-  let buttons = document.createElement("div");
-  buttons.classList.add("dialog-buttons");
+  editor.appendChild(
+    create_confirm_buttons(
+      editor,
+      function () {
+        // Create base note object
+        let new_category = { "title": title.value };
 
-  // Create button
-  let create = document.createElement("input");
-  create.classList.add("add-button");
-  create.type = "button";
-  create.value = "add";
-  create.addEventListener(
-    "click",
-    function () {
-      // Create base note object
-      let new_category = { "title": title.value };
-
-      // Set worth
-      if (points_are_relevant()) {
-        let pv = parseFloat(points.value);
-        if (isNaN(pv)) {
-          pv = "";
+        // Set worth
+        if (points_are_relevant()) {
+          let pv = parseFloat(points.value);
+          if (isNaN(pv)) {
+            pv = "";
+          }
+          new_category.worth = pv;
+        } else {
+          new_category.worth = ""; // auto from children
         }
-        new_category.worth = pv;
-      } else {
-        new_category.worth = ""; // auto from children
+
+        // Figure out where this note is going:
+        let addr = section.__address__;
+        let feedback = section.__feedback__;
+        let rubric = section.__rubric__;
+
+        // Create the new note in the rubric or feedback:
+        let category = lookup_category(rubric, addr);
+        if (parent_autobox.checked) {
+          category.worth = "";
+        }
+        if (!category.hasOwnProperty("children")) {
+          category.children = [];
+        }
+        category.children.push(new_category);
+
+        let children_span = get_children_subsection(section);
+        children_span.appendChild(
+          weave_category(new_category, rubric, feedback, addr)
+        );
+
+        // Update point totals:
+        propagate_points(section);
       }
-
-      // Figure out where this note is going:
-      let addr = section.__address__;
-      let feedback = section.__feedback__;
-      let rubric = section.__rubric__;
-
-      // Create the new note in the rubric or feedback:
-      let category = lookup_category(rubric, addr);
-      if (parent_autobox.checked) {
-        category.worth = "";
-      }
-      if (!category.hasOwnProperty("children")) {
-        category.children = [];
-      }
-      category.children.push(new_category);
-
-      let children_span = get_children_subsection(section);
-      children_span.appendChild(
-        weave_category(new_category, rubric, feedback, addr)
-      );
-
-      // Update point totals:
-      propagate_points(section);
-
-      // Show ourselves out
-      editor.parentNode.removeChild(editor);
-    }
+    )
   );
-  buttons.appendChild(create);
-
-  // Cancel button
-  let cancel = document.createElement("input");
-  cancel.classList.add("add-button");
-  cancel.type = "button";
-  cancel.value = "cancel";
-  cancel.addEventListener(
-    "click",
-    function () {
-      // Show ourselves out
-      editor.parentNode.removeChild(editor);
-    }
-  );
-  buttons.appendChild(cancel);
-
-  editor.appendChild(buttons);
 
   return editor;
 }
 
+function create_dump_dialog() {
+  /*
+   * Looks at all currently cached data (ignores in-flight data, as that stuff
+   * hasn't changed) and creates a big JSON object storing everything to dump
+   * to a text box.
+   */
+
+  // First, bundle things up into a big JSON string:
+  let now = new Date();
+  let obj = {
+    "created": now.toJSON(),
+    "rubrics": {},
+    "feedback": {}
+  }
+
+  for (let asg of Object.keys(RUBRICS)) {
+    obj.rubrics[asg] = {};
+    for (let task of Object.keys(RUBRICS[asg])) {
+      obj.rubrics[asg][task] = RUBRICS[asg][task];
+    }
+  }
+
+  for (let asg of Object.keys(FEEDBACK)) {
+    obj.feedback[asg] = {};
+    for (let task of Object.keys(FEEDBACK[asg])) {
+      obj.feedback[asg][task] = {};
+      for (let student of Object.keys(FEEDBACK[asg][task])) {
+        obj.feedback[asg][task][student] = FEEDBACK[asg][task][student];
+      }
+    }
+  }
+
+  let json = JSON.stringify(obj);
+
+  // Now create our dialog:
+  let dialog = document.createElement("div");
+  dialog.classList.add("dialog");
+
+  dialog.appendChild(
+    document.createTextNode(
+      "Use the download button to receive the dump as a file, OR copy-paste the data from the text box below. Use the 'Restore from JSON' button to load the data and restore any changes you have made."
+    )
+  );
+  dialog.appendChild(document.createElement("br"));
+  dialog.appendChild(document.createElement("br"));
+  dialog.appendChild(
+    document.createTextNode(
+      "NOTE: The system cannot detect updates made (by you or others) since the dump, and they will be overwritten! Use only in an emergency when 'Save Changes' does not work."
+    ) // TODO: Detect those changes!
+  );
+
+  let dl_div = document.createElement("div");
+  dl_div.classList.add("dialog-buttons");
+
+  let dl_link = document.createElement("a");
+
+  let blob = new Blob([json], {type: "text/json;charset=utf-8"});
+  let ourl = URL.createObjectURL(blob);
+  let ts = now.getFullYear() + "-" + (now.getMonth() + 1) + "-" + now.getDate();
+  dl_link.href = ourl;
+  dl_link.download = "rigging-dump-" + ts + ".json";
+
+  let dl_button = document.createElement("input");
+  dl_button.type = "button"
+  dl_button.value = "Download JSON"
+
+  dl_link.appendChild(dl_button);
+  dl_div.appendChild(dl_link);
+
+  dialog.appendChild(dl_div);
+
+  let copyarea = document.createElement("textarea");
+  copyarea.rows = "8";
+  copyarea.readOnly = true;
+  copyarea.value = json;
+  copyarea.addEventListener("click", function () { copyarea.select(); });
+
+  dialog.appendChild(copyarea);
+
+  dialog.appendChild(create_done_button(dialog));
+
+  return dialog;
+}
+
+function create_restore_dialog() {
+  /*
+   * Creates a dialog that allows uploading a dump file to replace
+   * currently-loaded data. Uploading a dump will steal callbacks from the
+   * rubric and feedback queues, effectively cancelling any in-flight loading
+   * operations.
+   */
+
+  // Create our dialog:
+  let dialog = document.createElement("div");
+  dialog.classList.add("dialog");
+
+  dialog.appendChild(
+    document.createTextNode(
+      "Use the upload button to upload a dump file created using the 'Dump JSON' button."
+    )
+  );
+  dialog.appendChild(document.createElement("br"));
+  dialog.appendChild(document.createElement("br"));
+  dialog.appendChild(
+    document.createTextNode(
+      "NOTE: The system cannot detect updates made (by you or others) since the dump, and they will be overwritten! Use only in an emergency."
+    ) // TODO: Detect those changes!
+  );
+
+  let ul_div = document.createElement("div");
+  ul_div.classList.add("dialog-buttons");
+
+  let ul_input = document.createElement("input");
+  ul_input.type = "file"
+  ul_input.value = ""
+
+  let do_button = document.createElement("input");
+  do_button.classList.add("dialog-button");
+  do_button.type = "button";
+  do_button.value = "restore";
+  do_button.disabled = true;
+
+  let loading_img = document.createElement("img");
+  loading_img.src = "loading.gif";
+  loading_img.alt = "loading";
+
+  let done_msg = document.createElement("div");
+  done_msg.appendChild(document.createTextNode("Restore complete."));
+
+  function eventually_process_upload() {
+    /*
+     * Recursively setTimeouts until a file is available from the upload input,
+     * and then loads that file, restoring rubrics and feedback. Reports any
+     * errors via alerts, and asks for a refresh if they're serious.
+     */
+    let files = ul_input.files;
+    if (files === null || files === undefined || files.length < 1) {
+      setTimeout(eventually_process_upload, 50);
+    } else if (files.length > 1) {
+      alert(
+        "You attempted to upload multiple files!\nPlease select only a single file and try again."
+      );
+      ul_div.removeChild(loading_img);
+      do_button.disabled = false;
+    } else {
+      let first = files[0];
+      let fr = new FileReader();
+      fr.addEventListener(
+        "load",
+        function (e) {
+          let file_text = e.target.result;
+          let obj;
+          try {
+            obj = JSON.parse(file_text);
+          } catch (e) {
+            console.warn(e);
+            alert("Error parsing JSON or uploading file.\nPlease try again.");
+            ul_div.removeChild(loading_img);
+            do_button.disabled = false;
+            return;
+          }
+          if (
+            !obj.hasOwnProperty("rubrics")
+         || !obj.hasOwnProperty("feedback")
+          ) {
+            alert(
+              "Dump JSON appears to be malformed (missing 'rubrics' or "
+            + "'feedback' key).\nTry a different dump file."
+            );
+            ul_div.removeChild(loading_img);
+            do_button.disabled = false;
+            return;
+          }
+          try {
+            // Load RUBRICS
+            for (let asg of Object.keys(obj.rubrics)) {
+              if (!RUBRICS.hasOwnProperty(asg)) {
+                RUBRICS[asg] = {};
+              }
+              for (let task of Object.keys(obj.rubrics[asg])) {
+                let stolen = [];
+                if (
+                  QUEUES.rubrics.hasOwnProperty(asg)
+               && QUEUES.rubrics[asg].hasOwnProperty(task)
+                ) {
+                  stolen = QUEUES.rubrics[asg][task];
+                  delete QUEUES.rubrics[asg][task];
+                }
+                RUBRICS[asg][task] = obj.rubrics[asg][task];
+                for (cb of stolen) {
+                  cb(RUBRICS[asg][task]);
+                }
+              }
+            }
+
+            // Load FEEDBACK
+            for (let asg of Object.keys(obj.feedback)) {
+              if (!FEEDBACK.hasOwnProperty(asg)) {
+                FEEDBACK[asg] = {};
+              }
+              for (let task of Object.keys(obj.feedback[asg])) {
+                if (!FEEDBACK[asg].hasOwnProperty(task)) {
+                  FEEDBACK[asg][task] = {};
+                }
+                for (let student of Object.keys(obj.feedback[asg][task])) {
+                  let stolen = [];
+                  if (
+                    QUEUES.feedback.hasOwnProperty(asg)
+                 && QUEUES.feedback[asg].hasOwnProperty(task)
+                 && QUEUES.feedback[asg][task].hasOwnProperty(student)
+                  ) {
+                    stolen = QUEUES.feedback[asg][task][student];
+                    delete QUEUES.feedback[asg][task];
+                  }
+                  FEEDBACK[asg][task][student]=obj.feedback[asg][task][student];
+                  for (cb of stolen) {
+                    cb(FEEDBACK[asg][task][student]);
+                  }
+                }
+              }
+            }
+
+            // Re-link submissions
+            for (let asg of Object.keys(SUBMISSIONS)) {
+              for (let task of Object.keys(SUBMISSIONS[asg])) {
+                for (let student of Object.keys(SUBMISSIONS[asg][task])) {
+                  let sub = SUBMISSIONS[asg][task][student];
+                  sub.rubric = RUBRICS[asg][task];
+                  sub.feedback = FEEDBACK[asg][task][student];
+                }
+              }
+            }
+
+            // Clean out the points cache.
+            clear_points_cache();
+
+            // Re-evaluate submission display with the new info.
+            refresh_display();
+
+            ul_div.removeChild(loading_img);
+            ul_div.appendChild(done_msg);
+            do_button.disabled = false;
+          } catch (e) {
+            console.warn(e);
+            alert(
+              "Error unpacking dump file. Data integrity compromised!\n"
+            + "Please reload the page."
+            );
+            ul_div.removeChild(loading_img);
+            ul_div.appendChild(document.createTextNode("ERROR"));
+            ul_div.appendChild(document.createElement("br"));
+            ul_div.appendChild(
+              document.createTextNode("Please refresh the page.")
+            );
+            // leave button disabled
+          }
+        }
+      );
+      fr.readAsText(first);
+    }
+  }
+
+  ul_input.addEventListener(
+    "change",
+    function () {
+      do_button.disabled = false;
+      try {
+        ul_div.removeChild(done_msg);
+      } catch (e) {}
+    }
+  );
+
+  do_button.addEventListener(
+    "click",
+    function () {
+      ul_div.appendChild(loading_img);
+      do_button.disabled = true;
+      try {
+        ul_div.removeChild(done_msg);
+      } catch (e) {}
+      eventually_process_upload();
+    }
+  );
+
+  ul_div.appendChild(ul_input);
+  ul_div.appendChild(do_button);
+
+  dialog.appendChild(ul_div);
+
+  dialog.appendChild(create_done_button(dialog));
+
+  return dialog;
+}

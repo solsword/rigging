@@ -1,10 +1,12 @@
 #controls {
   position: absolute;
+  box-sizing: border-box;
   top: 0pt;
+  left: 0pt;
   height: 12vh;
-  padding-top: 2vh;
-  padding-bottom: 2vh;
-  line-height: 4vh;
+  padding-top: 1.5vh;
+  padding-bottom: 1.5vh;
+  line-height: 3vh;
   width: 100%;
   text-align: center;
   background: #eee;
@@ -16,21 +18,53 @@ div {
 
 #submission {
   position: absolute;
+  box-sizing: border-box;
   top: 12vh;
   left: 0pt;
-  width: 58vw;
+  width: 60vw;
+  height: 88vh;
   padding: 1vw;
-  background: #eee;
   overflow: scroll;
+  background: #eee;
 }
 
 #evaluation {
   position: absolute;
+  box-sizing: border-box;
   top: 12vh;
   right: 0pt;
-  width: 38vw;
+  width: 40vw;
+  height: 88vh;
   padding: 1vw;
+  overflow: scroll;
   background: #ccc;
+}
+
+.dialog {
+  position: absolute;
+  top: 15vh;
+  left: 0pt;
+  right: 0pt;
+  margin: auto;
+  width: 70vw;
+  max-width: 40em;
+  top: 15vh;
+  /* TODO: Alternate sizing on small screens/windows? */
+  padding: 1vmin;
+  border: 2pt solid black;
+  background-color: #ffffcc;
+  box-sizing: border-box;
+  overflow: scroll;
+  z-index: 10;
+  text-align: justify;
+}
+
+.dialog textarea {
+  box-sizing: border-box;
+  width: calc(100% - 8pt);
+  position: relative;
+  padding: 2pt;
+  margin: 4pt;
 }
 
 .section {
@@ -92,10 +126,11 @@ div {
   text-align: center;
 }
 
-.add-button {
+.dialog-button {
   padding: 2pt;
   margin-left: 3pt;
-  margin-bottom: 1pt;
+  margin-bottom: 2pt;
+  margin-top: 2pt;
   box-sizing: border-box;
 }
 
