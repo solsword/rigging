@@ -6,7 +6,7 @@ var SUBMISSIONS = {};
 
 var POINTS = {};
 var CURRENTLY_DISPLAYED = undefined;
-var BASE_PATH = "content"
+var BASE_PATH = "static/content"
 
 // Callback queues
 var QUEUES = {

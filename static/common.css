@@ -1,0 +1,59 @@
+.flashes {
+  position: fixed;
+  top: 0pt;
+  left: 0pt;
+  right: 0pt;
+  margin: 0pt auto 0pt auto;
+  width: 40vw;
+  text-align: center;
+  z-index: 12;
+  padding: 4pt;
+  background-color: #ffffee;
+  border-bottom: 1pt solid #ccccaa;
+  border-left: 1pt solid #ccccaa;
+  border-right: 1pt solid #ccccaa;
+  overflow: hidden;
+  animation: shrink 8s ease-in forwards;
+  box-sizing: border-box;
+
+  /*animation: shrink 4s ease-in 10s;*/
+}
+@keyframes shrink {
+  0% {
+    opacity: 1.0;
+    z-index: 12;
+  }
+  80% {
+    opacity: 0.8;
+    z-index: 12;
+  }
+  100% {
+    opacity: 0;
+    z-index: -1;
+  }
+}
+
+.hide {
+  display: none;
+}
+
+.flashes li {
+}
+
+#auth_corner {
+  position: fixed;
+  top: 0pt;
+  right: 0pt;
+  z-index: 10;
+  padding: 4pt;
+  background-color: #eeffff;
+  border-bottom: 1pt solid #aacccc;
+  border-left: 1pt solid #aacccc;
+}
+
+#auth_corner a:link, #auth_corner a:visited {
+  font-weight: bold;
+  text-decoration: none;
+  padding-left: 5pt;
+  color: #006688;
+}

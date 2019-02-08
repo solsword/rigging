@@ -9,7 +9,7 @@
   line-height: 3vh;
   width: 100%;
   text-align: center;
-  background: #eee;
+  background: #fff;
 }
 
 div {
@@ -24,8 +24,9 @@ div {
   width: 60vw;
   height: 88vh;
   padding: 1vw;
+  border-top: 1pt solid black;
+  border-right: 1pt solid black;
   overflow: scroll;
-  background: #eee;
 }
 
 #evaluation {
@@ -36,8 +37,9 @@ div {
   width: 40vw;
   height: 88vh;
   padding: 1vw;
+  border-top: 1pt solid black;
   overflow: scroll;
-  background: #ccc;
+  background: #cee;
 }
 
 .dialog {
@@ -71,27 +73,17 @@ div {
   /* fixed-size so that we know where to cut off on collapse */
   margin: 0pt 0pt 0pt 0pt;
   line-height: 3.2ex;
-  padding: 3pt 0pt 3pt 0pt;
-  border-top: 1pt solid black;
+  padding: 3pt 0pt 0pt 0pt;
+  border: 1pt solid black;
+  background-color: rgba(50, 100, 120, 0.2);
 }
 
 .children .section {
   margin-left: 0.7em;
   margin-right: 0pt;
   padding-right: 0pt;
-  background-color: #bbb;
-}
-
-.section .section .section {
-  background-color: #aaa;
-}
-
-.section .section .section .section {
-  background-color: #999;
-}
-
-.section .section .section .section .section {
-  background-color: #888;
+  border-right: none;
+  border-bottom: none;
 }
 
 .editor {
