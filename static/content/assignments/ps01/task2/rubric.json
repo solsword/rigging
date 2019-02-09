@@ -1,5 +1,6 @@
 {
-  "id": "task2",
+  "asg": "ps01",
+  "task": "task2",
   "submission_files": [ "timeProfiler.py" ],
   "points": 20,
   "category": {

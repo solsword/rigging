@@ -1,0 +1,15 @@
+p {
+  border-left: 0.6em solid #49a; 
+  border-right: 0.6em solid #49a; 
+  border-radius: 0.6em;
+  padding: 4pt;
+  background-color: rgba(0, 30, 45, 0.05);
+  width: 16em;
+}
+
+p:nth-child(even) {
+  border-left: 0.6em solid #4a9; 
+  border-right: 0.6em solid #4a9; 
+  border-radius: 0.6em;
+  padding: 4pt;
+}

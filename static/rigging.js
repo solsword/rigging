@@ -7,6 +7,8 @@ var SUBMISSIONS = {};
 var POINTS = {};
 var CURRENTLY_DISPLAYED = undefined;
 var BASE_PATH = "static/content"
+var ANY_DIRTY = false;
+var SAVE_IN_FLIGHT = undefined;
 
 // Callback queues
 var QUEUES = {
@@ -489,6 +491,62 @@ function load_file(path, callback, errorfn, mime_type) {
   }
 }
 
+function upload_json(path, object, callback, errorfn) {
+  let xobj = new XMLHttpRequest();
+  let url = window.location.href;
+  let base = url.substr(0, url.lastIndexOf('/'));
+  let target = base + "/upload";
+
+  xobj.open("POST", target);
+  xobj.setRequestHeader("Content-Type", "applicaton/json;charset=UTF-8");
+  xobj.onload = function() {
+    let successful = (
+      xobj.status == 200
+   || (xobj.status == 0 && dpath.startsWith("file://"))
+    );
+    if (!successful) {
+      if (errorfn) {
+        errorfn("STATUS", xobj.status);
+      } else {
+        console.error(
+          "Failed to upload JSON to '" + path + "' (-> '" + target + "')"
+        );
+        console.error("Response code " + xobj.status);
+      }
+    } else {
+      callback(xobj.responseText);
+    }
+  };
+  xobj.onerror = function () {
+    if (errorfn) {
+      errorfn("REQUEST", undefined)
+    } else {
+      console.error(
+        "Failed to upload JSON to '" + path + "' (-> '" + target + "')"
+      );
+    }
+  }
+  try {
+    xobj.send(
+      JSON.stringify(
+        {
+          "target": path,
+          "content": object
+        }
+      )
+    );
+  } catch (e) {
+    if (errorfn) {
+      errorfn("JAVASCRIPT", e)
+    } else {
+      console.error(
+        "Failed to upload JSON to '" + path + "' (-> '" + target + "')"
+      );
+      console.error(e);
+    }
+  }
+}
+
 function load_json(path, callback, errorfn) {
   load_file(
     path,
@@ -553,7 +611,7 @@ function init_controls(asg_info) {
   save_button.addEventListener(
     "click",
     function () {
-      alert("TODO: Saving does not work yet!");
+      document.body.appendChild(create_save_dialog());
     }
   );
 
@@ -996,11 +1054,14 @@ function clear_points_cache() {
   POINTS = {};
 }
 
-function cache_earned(addr, earned) {
-  if (POINTS.hasOwnProperty(addr)) {
-    POINTS[addr].earned = earned;
+function cache_earned(student, addr, earned) {
+  if (!POINTS.hasOwnProperty(student)) {
+    POINTS[student] = {};
+  }
+  if (POINTS[student].hasOwnProperty(addr)) {
+    POINTS[student][addr].earned = earned;
   } else {
-    POINTS[addr] = { "earned": earned };
+    POINTS[student][addr] = { "earned": earned };
   }
 }
 
@@ -1067,7 +1128,7 @@ function compute_earned(addr, rubric, feedback, skip_cache) {
   }
   if (feedback.overrides.hasOwnProperty(addr)) {
     let result = feedback.overrides[addr];
-    cache_earned(addr, result);
+    cache_earned(feedback.student, addr, result);
     return result;
   }
   // Look up the category and it's worth:
@@ -1119,7 +1180,7 @@ function compute_earned(addr, rubric, feedback, skip_cache) {
   if (points < 0) {
     points = 0;
   }
-  cache_earned(addr, points);
+  cache_earned(feedback.student, addr, points);
   return points;
 }
 
@@ -1158,11 +1219,27 @@ function propagate_points(section) {
    * Given a section whose earned or worth just changed, propagates those
    * changes upwards within the DOM tree. Uses a skip_cache of 1.
    */
+
+  // Recompute points w/out using cached value:
   refresh_points(section, 1);
+
+  // Propagate to parent section:
   let parent_section = section.parentNode.parentNode;
   if (node_has_class(parent_section, "section")) {
     // We're not at the top.
     propagate_points(parent_section);
+  }
+}
+
+function mark_dirty(fb_or_rb) {
+  fb_or_rb.dirty = "true";
+  ANY_DIRTY = true;
+  let fb_clean = document.getElementById("feedback_clean")
+  fb_clean.innerText = "unsaved changes";
+  fb_clean.classList.remove("data-clean");
+  fb_clean.classList.add("data-dirty");
+  if (!save_in_progress()) {
+    document.getElementById("save_changes").disabled = false;
   }
 }
 
@@ -1192,7 +1269,12 @@ function update_category_earned(section) {
   } else {
     fb.overrides[addr] = points;
   }
+
+  // Propagate changes upwards:
   propagate_points(section);
+
+  // Mark the feedback object as dirty:
+  mark_dirty(fb);
 }
 
 function update_category_worth(section) {
@@ -1222,7 +1304,12 @@ function update_category_worth(section) {
   } else {
     cat.worth = points;
   }
+
+  // Propagate changes upwards:
   propagate_points(section);
+
+  // Mark the rubric object as dirty:
+  mark_dirty(rb);
 }
 
 function update_note(note_div) {
@@ -1257,6 +1344,7 @@ function update_note(note_div) {
   let section = get_parent_section(note_div);
   let addr = section.__address__;
   let fb = section.__feedback__;
+  let rb = section.__rubric__;
 
   // Update adjust value:
   if (points != undefined) {
@@ -1265,6 +1353,7 @@ function update_note(note_div) {
 
   // Update feedback according to toggle status:
   if (id == undefined) { // a specific note
+
     if (toggled) {
       delete note["disabled"];
 
@@ -1282,7 +1371,12 @@ function update_note(note_div) {
         adjust_input.disabled = true;
       }
     }
+
+    // Mark the feedback object as dirty:
+    mark_dirty(fb);
+
   } else { // a common note
+
     if (toggled) {
       if (!fb.notes.hasOwnProperty(addr)) {
         fb.notes[addr] = {};
@@ -1308,9 +1402,13 @@ function update_note(note_div) {
         adjust_input.disabled = true;
       }
     }
+
+    // Mark the feedback and rubric objects as dirty:
+    mark_dirty(fb);
+    mark_dirty(rb);
   }
 
-  // Finally, propagate points changes:
+  // Propagate points changes upwards:
   propagate_points(section);
 }
 
@@ -1355,6 +1453,17 @@ function weave(submission) {
   let progress = document.createElement("div");
   progress.classList.add("progress");
   progress.classList.add("progress-" + feedback.progress);
+
+  let clean = document.createElement("span");
+  clean.id = "feedback_clean";
+  clean.classList.add("data-status");
+  clean.classList.add("data-clean");
+  if (feedback.dirty || rubric.dirty) {
+    clean.appendChild(document.createTextNode("unsaved changes"));
+  } else {
+    clean.appendChild(document.createTextNode("no changes"));
+  }
+  progress.appendChild(clean);
 
   let finished = document.createElement("input");
   finished.classList.add("toggle-button");
@@ -1559,7 +1668,7 @@ function weave_category(category, rubric, feedback, prefix) {
   section.appendChild(children_subsection);
 
   // Show points:
-  refresh_points(section);
+  refresh_points(section, 1);
 
   return section;
 }
@@ -1824,13 +1933,19 @@ function create_note_editor(section) {
 
         // Create the new note in the rubric or feedback:
         if (specific) { // add it to specific notes in feedback
+
           new_note.item = addr;
           feedback.specific.push(new_note);
 
           // Add a div to our section:
           let specific = get_specific_subsection(section);
           specific.appendChild(weave_note(new_note, addr, undefined, false));
+
+          // Mark the feedback as dirty:
+          mark_dirty(feedback);
+
         } else {
+
           let category = lookup_category(rubric, addr);
           let id = next_note_id(category);
           if (category.note_order == undefined) {
@@ -1849,6 +1964,10 @@ function create_note_editor(section) {
 
           let common = get_common_subsection(section);
           common.appendChild(weave_note(new_note, addr, id, false));
+
+          // Mark the feedback and rubric as dirty:
+          mark_dirty(feedback);
+          mark_dirty(rubric);
         }
 
         // Update point totals:
@@ -1939,12 +2058,12 @@ function create_category_editor(section) {
           new_category.worth = ""; // auto from children
         }
 
-        // Figure out where this note is going:
+        // Figure out where this category is going:
         let addr = section.__address__;
         let feedback = section.__feedback__;
         let rubric = section.__rubric__;
 
-        // Create the new note in the rubric or feedback:
+        // Create the new category in the rubric:
         let category = lookup_category(rubric, addr);
         if (parent_autobox.checked) {
           category.worth = "";
@@ -1954,10 +2073,14 @@ function create_category_editor(section) {
         }
         category.children.push(new_category);
 
+        // Add the new category to the DOM:
         let children_span = get_children_subsection(section);
         children_span.appendChild(
           weave_category(new_category, rubric, feedback, addr)
         );
+
+        // Mark the rubric as dirty:
+        mark_dirty(rubric);
 
         // Update point totals:
         propagate_points(section);
@@ -1966,6 +2089,222 @@ function create_category_editor(section) {
   );
 
   return editor;
+}
+
+function create_save_dialog() {
+  /*
+   * Looks at all currently cached data (ignores in-flight data, as that stuff
+   * hasn't changed) and creates a list of dirty items to save, which it
+   * displays with confirm/cancel buttons to actually push the data to the
+   * server.
+   */
+
+  // First, gather dirty rubric and feedback objects:
+  let dirty_rubrics = [];
+  let dirty_feedback = [];
+
+  for (let asg of Object.keys(RUBRICS)) {
+    for (let task of Object.keys(RUBRICS[asg])) {
+      let rb = RUBRICS[asg][task];
+      if (rb.dirty) {
+        dirty_rubrics.push(rb);
+      }
+    }
+  }
+
+  for (let asg of Object.keys(FEEDBACK)) {
+    for (let task of Object.keys(FEEDBACK[asg])) {
+      for (let student of Object.keys(FEEDBACK[asg][task])) {
+        let fb = FEEDBACK[asg][task][student];
+        if (fb.dirty) {
+          dirty_feedback.push(fb);
+        }
+      }
+    }
+  }
+
+  // Now create our dialog:
+  let dialog = document.createElement("div");
+  dialog.classList.add("dialog");
+
+  if (dirty_rubrics.length + dirty_feedback.length == 0) {
+    // Nothing to save
+    dialog.appendChild(
+      document.createTextNode("There are no unsaved changes.")
+    );
+    dialog.appendChild(create_done_button(dialog));
+    return dialog;
+  }
+
+  // At least one item to save...
+
+  dialog.appendChild(
+    document.createTextNode("The following items have been modified:")
+  );
+
+  let modlist = document.createElement("ul");
+  modlist.classList.add("save-list");
+
+  if (dirty_rubrics.length > 0) {
+    let rub = document.createElement("li");
+    rub.appendChild(document.createTextNode("Rubrics:"))
+
+    let modrub = document.createElement("ul");
+    for (let rb of dirty_rubrics) {
+      let li = document.createElement("li");
+      li.classList.add("save-rubric");
+      li.appendChild(document.createTextNode(rb.asg + "/" + rb.task));
+      modrub.appendChild(li);
+    }
+
+    rub.appendChild(modrub);
+
+    modlist.appendChild(rub);
+  }
+
+  if (dirty_feedback.length > 0) {
+    let feed = document.createElement("li");
+    feed.appendChild(document.createTextNode("Feedback:"))
+
+    let modfeed = document.createElement("ul");
+    for (let fb of dirty_feedback) {
+      let li = document.createElement("li");
+      li.classList.add("save-feedback");
+      li.appendChild(
+        document.createTextNode(fb.asg + "/" + fb.task + ":" + fb.student)
+      );
+      modfeed.appendChild(li);
+    }
+
+    feed.appendChild(modfeed);
+
+    modlist.appendChild(feed);
+  }
+
+  dialog.appendChild(modlist);
+
+  dialog.appendChild(
+    document.createTextNode("Are you sure you want to save these changes?")
+  );
+
+  dialog.appendChild(
+    create_confirm_buttons(
+      dialog,
+      function () {
+        // We've started a save operation
+        SAVE_IN_FLIGHT = {
+          "rubrics": {},
+          "feedback": {}
+        };
+
+        // Disable the save button
+        document.getElementById("save_changes").disabled = true;
+
+        // Clean up dirty flags and start individual operations
+        ANY_DIRTY = false;
+        for (let rb of dirty_rubrics) {
+          delete rb["dirty"];
+          upload_rubric(rb);
+        }
+        for (let fb of dirty_feedback) {
+          delete fb["dirty"];
+          upload_feedback(fb);
+        }
+      }
+    )
+  );
+
+  return dialog;
+}
+
+function upload_rubric(rb) {
+  if (!SAVE_IN_FLIGHT.rubrics.hasOwnProperty(rb.asg)) {
+    SAVE_IN_FLIGHT.rubrics[rb.asg] = {};
+  }
+  SAVE_IN_FLIGHT.rubrics[rb.asg][rb.task] = rb;
+  upload_json(
+    "assignments/" + rb.asg + "/" + rb.task + "/rubric.json",
+    rb,
+    function () {
+      finalize_rubric_save(rb.asg, rb.task);
+    },
+    function (category, error) {
+      console.warn("Unable to save rubric '" + rb.asg + "/" + rb.task + "'");
+      mark_dirty(rb);
+      finalize_rubric_save(rb.asg, rb.task);
+    }
+  );
+}
+
+function upload_feedback(fb) {
+  if (!SAVE_IN_FLIGHT.feedback.hasOwnProperty(fb.asg)) {
+    SAVE_IN_FLIGHT.feedback[fb.asg] = {};
+  }
+  if (!SAVE_IN_FLIGHT.feedback[fb.asg].hasOwnProperty(fb.task)) {
+    SAVE_IN_FLIGHT.feedback[fb.asg][fb.task] = {};
+  }
+  SAVE_IN_FLIGHT.feedback[fb.asg][fb.task][fb.student] = fb;
+  let fbpath = "feedback/" + fb.asg + "/" + fb.student + "/" + fb.task +".json";
+  upload_json(
+    fbpath,
+    fb,
+    function () {
+      finalize_feedback_save(fb.asg, fb.task, fb.student);
+    },
+    function (category, error) {
+      console.warn(
+        "Unable to save feedback '" + fb.asg + "/" + fb.task + ":"
+      + fb.student + "'"
+      );
+      mark_dirty(fb);
+      finalize_feedback_save(fb.asg, fb.task, fb.student);
+    }
+  );
+}
+
+function save_in_progress() {
+  if (SAVE_IN_FLIGHT == undefined) {
+    return false;
+  }
+  for (let asg of Object.keys(SAVE_IN_FLIGHT.rubrics)) {
+    if (Object.keys(SAVE_IN_FLIGHT.rubrics[asg]).length > 0) {
+      return true;
+    }
+  }
+  for (let asg of Object.keys(SAVE_IN_FLIGHT.feedback)) {
+    for (let task of Object.keys(SAVE_IN_FLIGHT.feedback[asg])) {
+      if (Object.keys(SAVE_IN_FLIGHT.feedback[asg][task]).length > 0) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function finalize_rubric_save(asg, task) {
+  delete SAVE_IN_FLIGHT.rubrics[asg][task];
+  if (!save_in_progress()) { // that was the last thing being saved
+    clean_up_save();
+  }
+}
+
+function finalize_feedback_save(asg, task, student) {
+  delete SAVE_IN_FLIGHT.feedback[asg][task][student];
+  if (!save_in_progress()) { // that was the last thing being saved
+    clean_up_save();
+  }
+}
+
+function clean_up_save() {
+  SAVE_IN_FLIGHT = undefined;
+  if (ANY_DIRTY) {
+    document.getElementById("save_changes").disabled = false;
+  } else {
+    let fb_clean = document.getElementById("feedback_clean")
+    fb_clean.innerText = "no changes";
+    fb_clean.classList.add("data-clean");
+    fb_clean.classList.remove("data-dirty");
+  }
 }
 
 function create_dump_dialog() {

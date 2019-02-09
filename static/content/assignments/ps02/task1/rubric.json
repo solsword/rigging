@@ -1,5 +1,6 @@
 {
-  "id": "task1",
+  "asg": "ps02",
+  "task": "task1",
   "submission_files": [ "testFile.py" ],
   "points": 20,
   "category": {

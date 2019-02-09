@@ -1,15 +1,20 @@
+body {
+  background: #fff;
+}
+
 #controls {
   position: absolute;
   box-sizing: border-box;
   top: 0pt;
   left: 0pt;
-  height: 12vh;
+  height: calc(12vh + 8pt);
   padding-top: 1.5vh;
   padding-bottom: 1.5vh;
   line-height: 3vh;
   width: 100%;
   text-align: center;
-  background: #fff;
+  overflow: scroll;
+  border-bottom: 8pt solid #9ed;
 }
 
 div {
@@ -19,28 +24,103 @@ div {
 #submission {
   position: absolute;
   box-sizing: border-box;
-  top: 12vh;
+  top: calc(12vh + 8pt);
   left: 0pt;
   width: 60vw;
   height: 88vh;
   padding: 1vw;
-  border-top: 1pt solid black;
-  border-right: 1pt solid black;
+  border-right: 8pt solid #9ed;
   overflow: scroll;
 }
 
 #evaluation {
   position: absolute;
   box-sizing: border-box;
-  top: 12vh;
+  top: calc(12vh + 0.6em);
   right: 0pt;
   width: 40vw;
   height: 88vh;
   padding: 1vw;
-  border-top: 1pt solid black;
   overflow: scroll;
-  background: #cee;
+  background-color: rgba(0, 30, 45, 0.05);
+  /*background: #cee;*/
 }
+
+.progress {
+  border-left: 0.6em solid #4b9;
+  border-right: 0.6em solid #4b9;
+  border-radius: 0.6em;
+  text-align: center;
+  padding: 4pt;
+  background-color: rgba(0, 30, 45, 0.05);
+}
+
+.progress-fresh {
+  border-color: #888;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.progress-active {
+  border-color: #94b;
+  background-color: rgba(80, 20, 60, 0.1);
+}
+
+.progress-finished {
+  border-color: #4b9;
+  background-color: rgba(20, 80, 60, 0.1);
+}
+
+.data-status {
+  margin: 0pt 6pt 0pt 6pt;
+  color: #666;
+}
+
+.data-dirty {
+  font-weight: bold;
+}
+
+.data-clean:before, .data-clean:after {
+  content: "-";
+}
+
+.data-dirty:before, .data-dirty:after {
+  content: "~";
+}
+
+.section {
+  margin: 0pt 0pt 0pt 0pt;
+  /* fixed-size so that we know where to cut off on collapse */
+  line-height: 3.4ex;
+  padding: 3pt 0pt 3pt 3pt;
+  margin-top: 0.4em;
+  border-left: 0.6em solid #49b;
+  border-radius: 0.6em;
+  /*border: 1pt solid black;*/
+  background-color: rgba(0, 30, 45, 0.05);
+}
+
+.feedback > .section {
+  border-right: 0.6em solid #49b;
+}
+
+.children .section {
+  /*border-left: 0.7em solid #49b;*/
+  margin-left: 0.4em;
+  /*
+  border-right: none;
+  border-bottom: none;
+  */
+}
+
+.children .section:nth-child(even) {
+  /*border-left: 0.7em solid #49b;*/
+  border-color: #279;
+  /*
+  border-right: none;
+  border-bottom: none;
+  */
+}
+
 
 .dialog {
   position: absolute;
@@ -69,22 +149,6 @@ div {
   margin: 4pt;
 }
 
-.section {
-  /* fixed-size so that we know where to cut off on collapse */
-  margin: 0pt 0pt 0pt 0pt;
-  line-height: 3.2ex;
-  padding: 3pt 0pt 0pt 0pt;
-  border: 1pt solid black;
-  background-color: rgba(50, 100, 120, 0.2);
-}
-
-.children .section {
-  margin-left: 0.7em;
-  margin-right: 0pt;
-  padding-right: 0pt;
-  border-right: none;
-  border-bottom: none;
-}
 
 .editor {
   border: 1pt solid black;
@@ -128,23 +192,24 @@ div {
 
 .collapsed {
   /* Matches section line-height above */
-  height: 3.2ex;
+  height: 3.4ex;
   overflow: hidden;
 }
 
 .sec-title {
   font-weight: bold;
-  height: 3.2ex;
+  font-size: 2.8ex;
+  height: 3.4ex;
   display: inline-block;
   margin-bottom: 3pt;
 }
 
 .points {
   display: block;
-  clear: right; /* TODO: Get rid of this and be careful with height!! */
+  box-sizing: border-box;
   float: right;
   font-weight: bold;
-  height: 3.2ex;
+  height: 3.4ex;
   margin: 0pt;
   margin-right: 3pt;
 }
@@ -180,7 +245,7 @@ div {
 
 input.disabled {
   text-decoration: none;
-  color: #999;
+  color: #aaa;
 }
 
 .dialog-buttons {

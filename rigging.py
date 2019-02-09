@@ -1,5 +1,6 @@
 import flask
 import os
+import json
 
 app = flask.Flask(__name__)
 
@@ -13,15 +14,25 @@ and password == ""
 
 @app.route("/")
 def index():
-  return flask.redirect(flask.url_for("rigging"))
+  return flask.redirect(flask.url_for("evaluate"))
 
-@app.route("/rigging.html")
-def rigging():
+@app.route("/evaluate")
+def evaluate():
   if flask.session.get("username", None) == None:
     flask.flash("Please log in first.")
     return flask.redirect(flask.url_for("login"))
   else:
     return flask.render_template("rigging.html")
+
+@app.route("/upload", methods=["POST"])
+def upload():
+  if flask.session.get("username", None) == None:
+    return "You must be logged in to edit evaluations!", 401
+  else:
+    obj = json.loads(flask.request.content)
+    print(obj)
+    # TODO: HERE
+    return "Uploading isn't implemented yet.", 403
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -42,14 +53,12 @@ def login():
       flask.flash(
         "You are now logged in as {}".format(flask.session["username"])
       )
-      return flask.redirect(flask.url_for("rigging"))
+      return flask.redirect(flask.url_for("evaluate"))
     else:
       flask.flash("Invalid username or password.")
       return flask.redirect(flask.url_for("login"))
   else:
     return flask.render_template("login.html")
-
-#@app.route("/
 
 @app.route("/logout")
 def logout():

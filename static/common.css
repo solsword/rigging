@@ -46,14 +46,18 @@
   right: 0pt;
   z-index: 10;
   padding: 4pt;
-  background-color: #eeffff;
-  border-bottom: 1pt solid #aacccc;
-  border-left: 1pt solid #aacccc;
+  background-color: #eff;
+  border-bottom: 1pt solid #acc;
+  border-left: 1pt solid #acc;
 }
 
 #auth_corner a:link, #auth_corner a:visited {
   font-weight: bold;
   text-decoration: none;
-  padding-left: 5pt;
-  color: #006688;
+  margin-left: 3pt;
+  color: #068;
+}
+
+#auth_corner a:link:before, #auth_corner a:visited:before {
+  content: "❧ ";
 }

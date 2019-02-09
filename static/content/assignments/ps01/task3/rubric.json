@@ -1,5 +1,6 @@
 {
-  "id": "task3",
+  "asg": "ps01",
+  "task": "task3",
   "submission_files": [ "graphicsScene.py" ],
   "points": 17,
   "category": {

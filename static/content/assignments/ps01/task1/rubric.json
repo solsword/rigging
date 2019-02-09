@@ -1,5 +1,6 @@
 {
-  "id": "task1",
+  "asg": "ps01",
+  "task": "task1",
   "submission_files": [ "debugNumsFixed.py" ],
   "points": 18,
   "category": {
