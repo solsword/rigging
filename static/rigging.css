@@ -2,6 +2,13 @@ body {
   background: #fff;
 }
 
+.flashes {
+  left: 0pt;
+  margin: 0pt;
+  width: 20vw;
+  min-width: 8em;
+}
+
 #controls {
   position: absolute;
   box-sizing: border-box;

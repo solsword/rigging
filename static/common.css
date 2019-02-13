@@ -5,6 +5,7 @@
   right: 0pt;
   margin: 0pt auto 0pt auto;
   width: 40vw;
+  min-width: 12em;
   text-align: center;
   z-index: 12;
   padding: 4pt;
@@ -46,6 +47,7 @@
   right: 0pt;
   z-index: 10;
   padding: 4pt;
+  max-width: 20vw;
   background-color: #eff;
   border-bottom: 1pt solid #acc;
   border-left: 1pt solid #acc;
@@ -56,6 +58,7 @@
   text-decoration: none;
   margin-left: 3pt;
   color: #068;
+  white-space: nowrap;
 }
 
 #auth_corner a:link:before, #auth_corner a:visited:before {

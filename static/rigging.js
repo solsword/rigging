@@ -495,10 +495,12 @@ function upload_json(path, object, callback, errorfn) {
   let xobj = new XMLHttpRequest();
   let url = window.location.href;
   let base = url.substr(0, url.lastIndexOf('/'));
-  let target = base + "/upload";
+  let target = base + "/upload/" + path;
 
   xobj.open("POST", target);
+  // TODO: Why don't these work?!?
   xobj.setRequestHeader("Content-Type", "applicaton/json;charset=UTF-8");
+  xobj.overrideMimeType("application/json");
   xobj.onload = function() {
     let successful = (
       xobj.status == 200
@@ -527,14 +529,7 @@ function upload_json(path, object, callback, errorfn) {
     }
   }
   try {
-    xobj.send(
-      JSON.stringify(
-        {
-          "target": path,
-          "content": object
-        }
-      )
-    );
+    xobj.send(JSON.stringify(object));
   } catch (e) {
     if (errorfn) {
       errorfn("JAVASCRIPT", e)
@@ -1264,6 +1259,13 @@ function update_category_earned(section) {
   let fb = section.__feedback__;
 
   // Update feedback override
+  if (
+    (value == "" && fb.overrides.hasOwnProperty(addr))
+ || (value != "" && fb.overrides[addr] != points)
+  ) {
+    // Value is changing, so mark the feedback as dirty.
+    mark_dirty(fb);
+  }
   if (value == "") {
     delete fb.overrides[addr];
   } else {
@@ -1272,9 +1274,6 @@ function update_category_earned(section) {
 
   // Propagate changes upwards:
   propagate_points(section);
-
-  // Mark the feedback object as dirty:
-  mark_dirty(fb);
 }
 
 function update_category_worth(section) {
@@ -1299,6 +1298,14 @@ function update_category_worth(section) {
 
   // Update rubric:
   let cat = lookup_category(rb, addr);
+  if (
+    (value == "" && cat.worth != "")
+ || (value != "" && cat.worth != points)
+  ) {
+    // Value is changing, so mark the rubric as dirty.
+    mark_dirty(rb);
+  }
+
   if (value == "") {
     cat.worth = "";
   } else {
@@ -1348,6 +1355,10 @@ function update_note(note_div) {
 
   // Update adjust value:
   if (points != undefined) {
+    if (note.adjust != points && id != undefined) {
+      // rubric is dirty only if the points actually changed
+      mark_dirty(rb)
+    }
     note.adjust = points;
   }
 
@@ -1355,6 +1366,11 @@ function update_note(note_div) {
   if (id == undefined) { // a specific note
 
     if (toggled) {
+      if (note.disabled) {
+        // feedback is dirty if the toggle state is changing
+        mark_dirty(fb);
+      }
+
       delete note["disabled"];
 
       desc.classList.remove("disabled");
@@ -1363,6 +1379,11 @@ function update_note(note_div) {
         adjust_input.disabled = false;
       }
     } else {
+      if (!note.disabled) {
+        // feedback is dirty if the toggle state is changing
+        mark_dirty(fb);
+      }
+
       note.disabled = true;
 
       desc.classList.add("disabled");
@@ -1371,16 +1392,15 @@ function update_note(note_div) {
         adjust_input.disabled = true;
       }
     }
-
-    // Mark the feedback object as dirty:
-    mark_dirty(fb);
-
   } else { // a common note
 
     if (toggled) {
       if (!fb.notes.hasOwnProperty(addr)) {
         fb.notes[addr] = {};
       } // add an entry for this address if we didn't have one already
+      if (!fb.notes[addr].hasOwnProperty(id) || fb.notes[addr][id] != 1) {
+        mark_dirty(fb); // feedback is dirty
+      }
       fb.notes[addr][id] = 1; // short truthy value
 
       desc.classList.remove("disabled");
@@ -1390,6 +1410,7 @@ function update_note(note_div) {
       }
     } else {
       if (fb.notes.hasOwnProperty(addr)) {
+        mark_dirty(fb); // feedback is dirty
         delete fb.notes[addr][id];
         if (Object.keys(fb.notes[addr]).length == 0) { // last one is gone
           delete fb.notes[addr];
@@ -1402,10 +1423,6 @@ function update_note(note_div) {
         adjust_input.disabled = true;
       }
     }
-
-    // Mark the feedback and rubric objects as dirty:
-    mark_dirty(fb);
-    mark_dirty(rb);
   }
 
   // Propagate points changes upwards:
@@ -2223,7 +2240,7 @@ function upload_rubric(rb) {
   }
   SAVE_IN_FLIGHT.rubrics[rb.asg][rb.task] = rb;
   upload_json(
-    "assignments/" + rb.asg + "/" + rb.task + "/rubric.json",
+    "rubric/" + rb.asg + "/" + rb.task,
     rb,
     function () {
       finalize_rubric_save(rb.asg, rb.task);
@@ -2244,7 +2261,7 @@ function upload_feedback(fb) {
     SAVE_IN_FLIGHT.feedback[fb.asg][fb.task] = {};
   }
   SAVE_IN_FLIGHT.feedback[fb.asg][fb.task][fb.student] = fb;
-  let fbpath = "feedback/" + fb.asg + "/" + fb.student + "/" + fb.task +".json";
+  let fbpath = "feedback/" + fb.asg + "/" + fb.task + "/" + fb.student
   upload_json(
     fbpath,
     fb,

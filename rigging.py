@@ -1,6 +1,7 @@
 import flask
 import os
 import json
+import sys
 
 app = flask.Flask(__name__)
 
@@ -18,24 +19,175 @@ def index():
 
 @app.route("/evaluate")
 def evaluate():
+  """
+  Serves the main app for entering grades.
+  """
   if flask.session.get("username", None) == None:
     flask.flash("Please log in first.")
     return flask.redirect(flask.url_for("login"))
   else:
     return flask.render_template("rigging.html")
 
-@app.route("/upload", methods=["POST"])
-def upload():
+FN_BAD = '\\/:*?"<>|~'
+
+def forbidden_path(path):
+  """
+  Returns True if the given path contains forbidden characters. Checks for
+  '\\', '/', '~' and '..' (although '.' is allowed) to attempt to prevent
+  access to files outside the intended directory tree, and also checks for ':',
+  '*', '?', '"', '<', '>', and '|' to humor (perhaps outdated?) OS filename
+  restrictions.
+  TODO: Is there a builtin for this?
+  """
+  return any(c in path for c in FN_BAD) or '..' in path
+
+def carefully_overwrite(target, obj):
+  """
+  Writes the given object to the given file as JSON. Records old file contents
+  and attempts to restore them if something goes wrong during the file writing
+  process. Returns True if it succeeds, and False if it fails.
+  TODO: Maintain backup files?
+  """
+  if os.path.exists(target):
+    try:
+      with open(target, 'r') as fin:
+        backup = fin.read()
+    except:
+      print(
+        "Error: Unable to read file '{}' for backup.".format(target),
+        file=sys.stderr
+      )
+      return False
+
+  # Try to encode the object as JSON:
+  try:
+    content = json.dumps(obj)
+  except:
+    print(
+      "Error: Unable to convert object to json:{}'".format(repr(obj)),
+      file=sys.stderr
+    )
+    return False
+
+  # Try to overwrite the file:
+  try:
+    with open(target, 'w', encoding="utf-8") as fout:
+      fout.write(content)
+  except:
+    # Try to write backup (if initial write fails due to e.g. permissions,
+    # we'll just have to hope that that means the file is not erased).
+    try:
+      print(
+        "Error: Unable to write file '{}'".format(target),
+        file=sys.stderr
+      )
+      with open(target, 'w', encoding="utf-8") as fout:
+        fout.write(backup)
+      return False
+    except:
+      print(
+        "Error: Unable to restore backup for file '{}'".format(target),
+        file=sys.stderr
+      )
+      return False
+
+  return True
+
+@app.route("/upload/rubric/<asg>/<task>", methods=["POST"])
+def upload_rubric(asg, task):
+  """
+  Accepts rubric JSON via post (TODO: only accept w/ proper MIME type) and
+  stores it to the assignment/task specified by the route info.
+  """
   if flask.session.get("username", None) == None:
-    return "You must be logged in to edit evaluations!", 401
+    return "You must be logged in to edit rubrics!", 401
+  elif forbidden_path(asg) or forbidden_path(task):
+    return "Invalid assignment or task ID.", 403
   else:
-    obj = json.loads(flask.request.content)
-    print(obj)
-    # TODO: HERE
-    return "Uploading isn't implemented yet.", 403
+    # Make sure request parses as JSON (Python weirdness with e.g., NaN is
+    # awkward though):
+    try:
+      obj = flask.request.get_json(force=True)
+    except:
+      print("Error: bad upload request (can't access JSON):", file=sys.stderr)
+      print("  Request:", flask.request, file=sys.stderr)
+      print("     Data:", flask.request.data, file=sys.stderr)
+      return "Invalid request", 400
+
+    # Create directories as necessary:
+    try:
+      sofar = os.path.join("static", "content")
+      for dir in ["assignments", asg, task]:
+        sofar = os.path.join(sofar, dir)
+        if not os.path.exists(sofar):
+          os.mkdir(sofar)
+    except:
+      print(
+        "Error: Unable to create directory '{}'".format(sofar),
+        file=sys.stderr
+      )
+      return "Upload aborted", 500
+
+    # Figure out where we're going to save things:
+    rbpath = os.path.join(sofar, "rubric.json")
+
+    # Carefully overwrite and write backup if this fails:
+    if carefully_overwrite(rbpath, obj):
+      return "Upload succeeded"
+    else:
+      return "Upload aborted", 500
+
+@app.route("/upload/feedback/<asg>/<task>/<student>", methods=["POST"])
+def upload_feedback(asg, task, student):
+  """
+  Accepts feedback JSON via post (TODO: only accept w/ proper MIME type) and
+  stores it to the assignment/task specified by the route info.
+  """
+  if flask.session.get("username", None) == None:
+    return "You must be logged in to edit rubrics!", 401
+  elif forbidden_path(asg) or forbidden_path(task) or forbidden_path(student):
+    return "Invalid assignment, task, or student ID.", 403
+  else:
+    # Make sure request parses as JSON (Python weirdness with e.g., NaN is
+    # awkward though):
+    try:
+      obj = flask.request.get_json(force=True)
+    except:
+      print("Error: bad upload request (can't access JSON):", file=sys.stderr)
+      print("  Request:", flask.request, file=sys.stderr)
+      print("     Data:", flask.request.data, file=sys.stderr)
+      return "Invalid request", 400
+
+    # Create directories as necessary:
+    try:
+      sofar = os.path.join("static", "content")
+      for dir in ["feedback", asg, student]:
+        sofar = os.path.join(sofar, dir)
+        if not os.path.exists(sofar):
+          os.mkdir(sofar)
+    except:
+      print(
+        "Error: Unable to create directory '{}'".format(sofar),
+        file=sys.stderr
+      )
+      return "Upload aborted", 500
+
+    # Figure out where we're going to save things:
+    fbpath = os.path.join(sofar, task + ".json")
+
+    # Carefully overwrite and write backup if this fails:
+    if carefully_overwrite(fbpath, obj):
+      return "Upload succeeded"
+    else:
+      return "Upload aborted", 500
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+  """
+  Handles login attempts via POST, and serves a login page via GET. Redirects
+  to evaluate on successful login.
+  """
   if flask.request.method == "POST":
     print(flask.request)
     print(flask.request.form)
@@ -62,6 +214,9 @@ def login():
 
 @app.route("/logout")
 def logout():
+  """
+  Handles logout action; redirecting to login with a flash.
+  """
   flask.session.pop("username", None)
   flask.flash("You have been logged out. Please log in again to continue.")
   return flask.redirect(flask.url_for("login"))
