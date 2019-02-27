@@ -157,14 +157,21 @@ div {
 }
 
 
-.editor {
+.creator, .editor {
   border: 1pt solid black;
   margin: 2pt;
   padding: 4pt;
+}
+
+.creator {
   background-color: #ffffcc;
 }
 
-.collapse-button {
+.editor {
+  background-color: #ffddcc;
+}
+
+.square-button {
   padding: 2pt;
   text-align: center;
   width: 16pt;
@@ -174,14 +181,8 @@ div {
   box-sizing: border-box;
 }
 
-.toggle-button {
-  padding: 2pt;
-  text-align: center;
-  width: 16pt;
-  display: inline-block;
-  margin-right: 2pt;
-  margin-left: 3pt;
-  box-sizing: border-box;
+.edit-button {
+  background-color: white;
 }
 
 .narrow-toggle {

@@ -879,6 +879,37 @@ function node_has_class(node, cls) {
   );
 }
 
+function get_progress_div() {
+  let eval_div = document.getElementById("evaluation");
+  for (let child of eval_div.childNodes) {
+    if (
+      node_has_class(child, "feedback")
+   && child.childNodes != undefined
+   && child.childNodes.length > 0
+    ) {
+      let fb_div = child;
+      for (let fb_child of fb_div.childNodes) {
+        if (node_has_class(fb_child, "progress")) {
+          return fb_child;
+        }
+      }
+    }
+  }
+  console.warn("Unable to find progress div.");
+  return undefined;
+}
+
+function get_progress_checkbox(progress_div) {
+  for (let child of progress_div.childNodes) {
+    if (node_has_class(child, "progress-toggle")) {
+      return child;
+    }
+  }
+  console.warn("Unable to find progress toggle in div:");
+  console.warn(progress_div);
+  return undefined;
+}
+
 function get_common_subsection(section) {
   for (let child of section.childNodes) {
     if (node_has_class(child, "notes") && node_has_class(child, "common")) {
@@ -971,6 +1002,17 @@ function get_adjust_input(note_div) {
   return undefined;
 }
 
+function get_edit_button(note_div) {
+  for (let child of note_div.childNodes) {
+    if (node_has_class(child, "edit-button")) {
+      return child;
+    }
+  }
+  console.warn("Failed to find edit button in note:");
+  console.warn(note_div);
+  return undefined;
+}
+
 function get_toggle_checkbox(note_div) {
   for (let child of note_div.childNodes) {
     if (node_has_class(child, "toggle-button")) {
@@ -1002,13 +1044,6 @@ function get_note_description(note_div) {
   console.warn("Failed to find description span in note:");
   console.warn(note_div);
   return undefined;
-}
-
-function get_parent_obj(score_obj) {
-  // Get parent of this score_obj using DOM hooks. Won't work pre-weave! Note:
-  // it returns null for top-level score objects.
-  let result = score_obj.node.parentNode.score_obj;
-  return result;
 }
 
 function current_earned(node) {
@@ -1154,7 +1189,7 @@ function compute_earned(addr, rubric, feedback, skip_cache) {
       if (note == undefined) {
         console.warn("Missing note '" + id + "' in category '" + addr + "'");
       } else {
-        if (note.adjust) {
+        if (!note.deleted && note.adjust) { // skip deleted notes
           points += note.adjust;
         }
       }
@@ -1264,6 +1299,7 @@ function update_category_earned(section) {
  || (value != "" && fb.overrides[addr] != points)
   ) {
     // Value is changing, so mark the feedback as dirty.
+    set_progress("active");
     mark_dirty(fb);
   }
   if (value == "") {
@@ -1368,6 +1404,7 @@ function update_note(note_div) {
     if (toggled) {
       if (note.disabled) {
         // feedback is dirty if the toggle state is changing
+        set_progress("active");
         mark_dirty(fb);
       }
 
@@ -1381,6 +1418,7 @@ function update_note(note_div) {
     } else {
       if (!note.disabled) {
         // feedback is dirty if the toggle state is changing
+        set_progress("active");
         mark_dirty(fb);
       }
 
@@ -1399,6 +1437,7 @@ function update_note(note_div) {
         fb.notes[addr] = {};
       } // add an entry for this address if we didn't have one already
       if (!fb.notes[addr].hasOwnProperty(id) || fb.notes[addr][id] != 1) {
+        set_progress("active");
         mark_dirty(fb); // feedback is dirty
       }
       fb.notes[addr][id] = 1; // short truthy value
@@ -1410,6 +1449,7 @@ function update_note(note_div) {
       }
     } else {
       if (fb.notes.hasOwnProperty(addr)) {
+        set_progress("active");
         mark_dirty(fb); // feedback is dirty
         delete fb.notes[addr][id];
         if (Object.keys(fb.notes[addr]).length == 0) { // last one is gone
@@ -1456,6 +1496,25 @@ function toggle_rubric_state(node, enable) {
   }
 }
 
+function set_progress(progress) {
+  let pg_div = get_progress_div();
+  let fb_div = pg_div.parentNode;
+  let feedback = fb_div.__submission__.feedback;
+  if (feedback.progress != progress) { // otherwise nothing changes
+    feedback.progress = progress;
+    pg_div.classList.remove("progress-finished");
+    pg_div.classList.remove("progress-fresh");
+    pg_div.classList.remove("progress-active");
+    pg_div.classList.add("progress-" + progress);
+    let pg_box = get_progress_checkbox(pg_div);
+    if (progress == "finished") {
+      pg_box.checked = true;
+    } else {
+      pg_box.checked = false;
+    }
+  }
+}
+
 function weave(submission) {
   /*
    * Weaves a submission object into a DOM element suitable for the
@@ -1465,6 +1524,7 @@ function weave(submission) {
   let feedback = submission.feedback;
 
   let sub_div = document.createElement("div");
+  sub_div.__submission__ = submission;
   sub_div.classList.add("feedback");
 
   let progress = document.createElement("div");
@@ -1483,22 +1543,17 @@ function weave(submission) {
   progress.appendChild(clean);
 
   let finished = document.createElement("input");
-  finished.classList.add("toggle-button");
+  finished.classList.add("square-button");
+  finished.classList.add("progress-toggle");
   finished.type = "checkbox";
   finished.checked = feedback.progress == "finished";
   finished.addEventListener(
     "click",
     function () {
       if (finished.checked) {
-        feedback.progress = "finished";
-        progress.classList.remove("progress-active");
-        progress.classList.remove("progress-fresh");
-        progress.classList.add("progress-finished");
+        set_progress("finished");
       } else {
-        feedback.progress = "active";
-        progress.classList.remove("progress-finished");
-        progress.classList.remove("progress-fresh");
-        progress.classList.add("progress-active");
+        set_progress("active");
       }
     }
   );
@@ -1550,6 +1605,9 @@ function weave_category(category, rubric, feedback, prefix) {
       } else {
         if (cat.notes.hasOwnProperty(id)) {
           let note = cat.notes[id];
+          if (note.deleted) {
+            continue; // skip this note; it's a deleted note
+          }
           let disabled = true;
           if (
             feedback.notes.hasOwnProperty(address)
@@ -1612,6 +1670,7 @@ function weave_category(category, rubric, feedback, prefix) {
   // Collapse button:
   let collapse = document.createElement("button");
   collapse.classList.add("collapse-button");
+  collapse.classList.add("square-button");
   collapse.appendChild(document.createTextNode("-"));
   collapse.addEventListener("click", collapse_section);
   section.appendChild(collapse);
@@ -1652,7 +1711,7 @@ function weave_category(category, rubric, feedback, prefix) {
     "click",
     function () {
       specific_subsection.appendChild(
-        create_note_editor(section)
+        create_note_creator(section)
       );
     }
   );
@@ -1669,7 +1728,7 @@ function weave_category(category, rubric, feedback, prefix) {
     "click",
     function () {
       section.insertBefore(
-        create_category_editor(section),
+        create_category_creator(section),
         add_category.nextSibling
       );
     }
@@ -1700,6 +1759,10 @@ function weave_note(note, address, id, disabled) {
    * a rubric) and creates an HTML DOM element for that note, rigging the
    * various inputs to modify the note in question.
    */
+  if (note.deleted) {
+    console.error("Weaving a deleted note!");
+  }
+
   if (disabled == undefined) {
     disabled = note.disabled; // it's fine if this is also undefined
   }
@@ -1736,9 +1799,25 @@ function weave_note(note, address, id, disabled) {
     points.style.display = "none";
   }
 
+  // Create an edit button for this note:
+  let edit = document.createElement("button");
+  edit.classList.add("edit-button");
+  edit.classList.add("square-button");
+  edit.appendChild(document.createTextNode("✎"));
+  edit.addEventListener(
+    "click",
+    function () {
+      edit.disabled = true;
+      let editor = create_note_editor(note_div);
+      note_div.parentNode.insertBefore(editor, note_div.nextSibling);
+    }
+  );
+  note_div.appendChild(edit);
+
   // Create a toggle box for this note:
   let toggle = document.createElement("input");
   toggle.classList.add("toggle-button");
+  toggle.classList.add("square-button");
   toggle.type = "checkbox";
   toggle.addEventListener(
     "click",
@@ -1764,11 +1843,14 @@ function weave_note(note, address, id, disabled) {
   return note_div;
 }
 
-function create_confirm_buttons(element, on_confirm) {
+function create_confirm_buttons(element, on_confirm, on_cancel) {
   /*
    * Creates confirm/cancel buttons for the given element, with the given
    * callback to occur (receiving the element as an argument) if the user
-   * confirms. Both buttons remove the element from its parent.
+   * confirms, and another callback if they cancel. One or both callbacks may
+   * be given as "undefined" in which case no extra behavior will occur for
+   * that button. Both buttons remove the element from its parent after the
+   * callback is finished.
    */
 
   // Buttons
@@ -1784,7 +1866,9 @@ function create_confirm_buttons(element, on_confirm) {
     "click",
     function () {
       // Call the callback
-      on_confirm(element);
+      if (on_confirm != undefined) {
+        on_confirm(element);
+      }
 
       // Show ourselves out
       element.parentNode.removeChild(element);
@@ -1800,6 +1884,11 @@ function create_confirm_buttons(element, on_confirm) {
   cancel.addEventListener(
     "click",
     function () {
+      // Call the callback
+      if (on_cancel != undefined) {
+        on_cancel(element);
+      }
+
       // Show ourselves out
       element.parentNode.removeChild(element);
     }
@@ -1843,10 +1932,10 @@ function create_done_button(element, on_done) {
   return buttons;
 }
 
-function create_note_editor(section) {
+function create_note_creator(section) {
   let editor = document.createElement("div");
-  editor.classList.add("editor");
-  editor.classList.add("note-editor");
+  editor.classList.add("creator");
+  editor.classList.add("note-creator");
 
   // Category select
   let cat_select = document.createElement("select");
@@ -1914,6 +2003,7 @@ function create_note_editor(section) {
   // Specificity checkbox
   let spec_box = document.createElement("input");
   spec_box.classList.add("toggle-button");
+  spec_box.classList.add("square-button");
   spec_box.classList.add("specific-option");
   spec_box.type = "checkbox";
   spec_box.checked = document.getElementById("common_default").checked;
@@ -1959,6 +2049,7 @@ function create_note_editor(section) {
           specific.appendChild(weave_note(new_note, addr, undefined, false));
 
           // Mark the feedback as dirty:
+          set_progress("active");
           mark_dirty(feedback);
 
         } else {
@@ -1983,6 +2074,7 @@ function create_note_editor(section) {
           common.appendChild(weave_note(new_note, addr, id, false));
 
           // Mark the feedback and rubric as dirty:
+          set_progress("active");
           mark_dirty(feedback);
           mark_dirty(rubric);
         }
@@ -1996,10 +2088,10 @@ function create_note_editor(section) {
   return editor;
 }
 
-function create_category_editor(section) {
+function create_category_creator(section) {
   let editor = document.createElement("div");
-  editor.classList.add("editor");
-  editor.classList.add("category-editor");
+  editor.classList.add("creator");
+  editor.classList.add("category-creator");
 
   // Title box
   let title = document.createElement("input");
@@ -2013,6 +2105,7 @@ function create_category_editor(section) {
   // Auto checkbox
   let autobox = document.createElement("input");
   autobox.classList.add("toggle-button");
+  autobox.classList.add("square-button");
   autobox.classList.add("auto-worth-option");
   autobox.type = "checkbox";
   autobox.checked = false;
@@ -2023,6 +2116,7 @@ function create_category_editor(section) {
   // Parent auto checkbox
   let parent_autobox = document.createElement("input");
   parent_autobox.classList.add("toggle-button");
+  parent_autobox.classList.add("square-button");
   parent_autobox.classList.add("parent-auto-worth-option");
   parent_autobox.type = "checkbox";
   parent_autobox.checked = true;
@@ -2101,6 +2195,163 @@ function create_category_editor(section) {
 
         // Update point totals:
         propagate_points(section);
+      }
+    )
+  );
+
+  return editor;
+}
+
+function create_note_editor(note_div) {
+  let note = note_div.__note__;
+  let id = note_div.__id__;
+  let specific = id == undefined;
+
+  let editor = document.createElement("div");
+  editor.classList.add("editor");
+  editor.classList.add("note-editor");
+
+  // Category select
+  let cat_select = document.createElement("select");
+  for (let cat_name of CATEGORIES) {
+    let opt = document.createElement("option");
+    opt.classList.add("cat-" + cat_name);
+    opt.value = cat_name;
+    opt.innerHTML = cat_name;
+    if (cat_name == note.category) { opt.selected = "true"; }
+    cat_select.appendChild(opt);
+  }
+  editor.appendChild(document.createTextNode("Category: "));
+  editor.appendChild(cat_select);
+  editor.appendChild(document.createElement("br"));
+
+  // Severity select
+  let sev_select = document.createElement("select");
+  for (let sev_name of SEVERITIES) {
+    let opt = document.createElement("option");
+    opt.classList.add("sev-" + sev_name);
+    opt.value = sev_name;
+    opt.innerHTML = sev_name;
+    if (sev_name == note.severity) { opt.selected = "true"; }
+    sev_select.appendChild(opt);
+  }
+  editor.appendChild(document.createTextNode("Severity: "));
+  editor.appendChild(sev_select);
+  editor.appendChild(document.createElement("br"));
+
+  // Description box
+  let desc = document.createElement("input");
+  desc.classList.add("note-description");
+  desc.type = "text";
+  desc.value = note.description;
+  editor.appendChild(document.createTextNode("Description: "));
+  editor.appendChild(desc);
+  editor.appendChild(document.createElement("br"));
+
+  // Delete checkbox
+  let del_box = document.createElement("input");
+  del_box.classList.add("toggle-button");
+  del_box.classList.add("square-button");
+  del_box.classList.add("specific-option");
+  del_box.type = "checkbox";
+  del_box.checked = false;
+  editor.appendChild(del_box);
+  editor.appendChild(document.createTextNode("Delete note"));
+  editor.appendChild(document.createElement("br"));
+
+  // Confirm/cancel buttons
+  editor.appendChild(
+    create_confirm_buttons(
+      editor,
+      function () {
+        // Note info
+        let section, addr, feedback, rubric;
+        try {
+          section = note_div.parentNode.parentNode;
+          addr = section.__address__;
+          feedback = section.__feedback__;
+          rubric = section.__rubric__;
+        } catch (e) {
+          console.error("Couldn't find section to edit note div.");
+          console.error(e);
+        }
+
+        // Figure out whether we're deleting this note:
+        if (del_box.checked) {
+          if (specific) { // no need to confirm
+              // Remove note div:
+              note_div.parentNode.removeChild(note_div);
+
+              // Remove note from feedback:
+              nspec = [];
+              for (let other_note of feedback.specific) {
+                if (other_note !== note) {
+                  nspec.push(other_note);
+                }
+              }
+              feedback.specific = nspec;
+
+              // Update points in section:
+              propagate_points(section);
+
+              // Mark just the feedback as dirty
+              set_progress("active");
+              mark_dirty(feedback);
+          } else { // note lives in rubric
+            if (
+              confirm(
+                 "Are you sure you want to delete this note for ALL students?"
+              )
+            ) {
+              // Remove note div:
+              note_div.parentNode.removeChild(note_div);
+
+              // Mark note as deleted:
+              let cat = lookup_category(rubric, addr);
+              cat.notes[id].deleted = true;
+
+              // Update points in section:
+              propagate_points(section);
+
+              // Mark the feedback and rubric as dirty:
+              set_progress("active");
+              mark_dirty(feedback);
+              mark_dirty(rubric);
+            } // Else (no at prompt) don't delete anything
+          }
+        } else { // not deleting
+          // Update note:
+          note.category = cat_select.value;
+          note.severity = cat_select.value;
+          note.description = desc.value;
+
+          // Re-weave the note
+          note_div.parentNode.insertBefore(
+            weave_note(note, addr, note_div.__id__, false),
+            note_div
+          )
+          note_div.parentNode.removeChild(note_div);
+
+          set_progress("active");
+          if (specific) {
+              // Mark just the feedback as dirty
+              mark_dirty(feedback);
+          } else {
+              // Mark the feedback and rubric as dirty:
+              mark_dirty(feedback);
+              mark_dirty(rubric);
+          }
+        }
+
+        // Update point totals:
+        propagate_points(section);
+
+        // Unlock the edit button again
+        get_edit_button(note_div).disabled = false;
+      },
+      function () {
+        // Unlock the edit button again
+        get_edit_button(note_div).disabled = false;
       }
     )
   );
@@ -2273,6 +2524,7 @@ function upload_feedback(fb) {
         "Unable to save feedback '" + fb.asg + "/" + fb.task + ":"
       + fb.student + "'"
       );
+      set_progress("active");
       mark_dirty(fb);
       finalize_feedback_save(fb.asg, fb.task, fb.student);
     }
