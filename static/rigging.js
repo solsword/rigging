@@ -260,7 +260,8 @@ function with_feedback(asg, task, student, callback) {
           "student": student,
           "overrides": {},
           "notes": {},
-          "specific": []
+          "specific": [],
+          "externals": {}
         };
         FEEDBACK[asg][task][student] = feedback;
         for (let cb of QUEUES.feedback[asg][task][student]) {
@@ -357,14 +358,7 @@ function continue_loading_submission(
           }
         }
         if (all_defined) {
-          finalize_submission_info(
-            asg,
-            task,
-            student,
-            rubric,
-            feedback,
-            submission_info
-          );
+          finalize_submission_info(submission_info);
         }
       },
       function (category, error) {
@@ -381,38 +375,27 @@ function continue_loading_submission(
           }
         }
         if (all_defined) {
-          finalize_submission_info(
-            asg,
-            task,
-            student,
-            rubric,
-            feedback,
-            submission_info
-          );
+          finalize_submission_info(submission_info);
         }
       }
     );
   }
 }
 
-function finalize_submission_info(
-  asg,
-  task,
-  student,
-  rubric,
-  feedback,
-  submission_info
-) {
+function finalize_submission_info(info) {
   let all_submitted = true;
   let none_submitted = true;
-  for (let file of submission_info.filenames) {
-    let sub = submission_info.files[file];
+  for (let file of info.filenames) {
+    let sub = info.files[file];
     if (sub.submitted == false) {
       all_submitted = false;
-      if (feedback.progress == "pre-fresh") {
-        feedback.specific.push(
+      if (info.feedback.progress == "pre-fresh") {
+        if (!info.feedback.externals.hasOwnProperty('Missing Files')) {
+          info.feedback.externals['Missing Files'] = [];
+        }
+        info.feedback.externals['Missing Files'].push(
           {
-            "item": task,
+            "item": info.task,
             "category": "crash",
             "severity": "critical",
             "description": "We couldn't find your file '" + sub.filename + "'!",
@@ -425,18 +408,18 @@ function finalize_submission_info(
     }
   }
   if (!all_submitted && !none_submitted) {
-    submission_info.status = "incomplete"
+    info.status = "incomplete"
   } else if (none_submitted) {
-    submission_info.status = "missing"
+    info.status = "missing"
   }
-  if (feedback.progress == "pre-fresh") {
-    feedback.progress = "fresh";
+  if (info.feedback.progress == "pre-fresh") {
+    info.feedback.progress = "fresh";
   }
-  SUBMISSIONS[asg][task][student] = submission_info;
-  for (let cb of QUEUES.submissions[asg][task][student]) {
-    cb(submission_info);
+  SUBMISSIONS[info.asg][info.task][info.student] = info;
+  for (let cb of QUEUES.submissions[info.asg][info.task][info.student]) {
+    cb(info);
   }
-  delete QUEUES.submissions[asg][task][student];
+  delete QUEUES.submissions[info.asg][info.task][info.student];
 }
 
 
@@ -1198,12 +1181,22 @@ function compute_earned(addr, rubric, feedback, skip_cache) {
 
   // Add in any adjustments from specific notes:
   for (let note of feedback.specific) {
-    if (note.item == addr) {
-      if (note.adjust && !note.disabled) {
+    if (note.item == addr && note.adjust && !note.disabled) {
         points += note.adjust;
+    }
+  }
+
+  // Add in any adjustments form external notes:
+  if (feedback.externals) {
+    for (let ext of Object.keys(feedback.externals)) {
+      for (let note of feedback.externals[ext]) {
+        if (note.item == addr && note.adjust && !note.disabled) {
+          points += note.adjust;
+        }
       }
     }
   }
+
   if (points > worth) {
     points = worth;
   }
@@ -1399,7 +1392,7 @@ function update_note(note_div) {
   }
 
   // Update feedback according to toggle status:
-  if (id == undefined) { // a specific note
+  if (id == undefined) { // a specific or external note
 
     if (toggled) {
       if (note.disabled) {
@@ -1630,6 +1623,22 @@ function weave_category(category, rubric, feedback, prefix) {
     }
   }
 
+  let external_here = {};
+  if (feedback.externals) {
+    for (let ext of Object.keys(feedback.externals)) {
+      for (let note of feedback.externals[ext]) {
+        if (note.item == address) {
+          if (!external_here.hasOwnProperty(ext)) {
+            external_here[ext] = [];
+          }
+          external_here[ext].push(
+            weave_note(note, address, undefined, note.disabled, true)
+          );
+        }
+      }
+    }
+  }
+
   // Create a section div:
   let section = document.createElement("div");
   section.classList.add("section");
@@ -1685,6 +1694,15 @@ function weave_category(category, rubric, feedback, prefix) {
   let common_subsection = document.createElement("div");
   common_subsection.classList.add("notes");
   common_subsection.classList.add("common");
+  if (notes_here.length == 0) {
+    common_subsection.classList.add("empty");
+  }
+
+  let common_ss_title = document.createElement("div");
+  common_ss_title.classList.add("title");
+  common_ss_title.appendChild(document.createTextNode("Rubric"));
+  common_subsection.appendChild(common_ss_title);
+
   for (let div of notes_here) {
     common_subsection.appendChild(div);
   }
@@ -1695,6 +1713,15 @@ function weave_category(category, rubric, feedback, prefix) {
   let specific_subsection = document.createElement("div");
   specific_subsection.classList.add("notes");
   specific_subsection.classList.add("specific");
+  if (specific_here.length == 0) {
+    specific_subsection.classList.add("empty");
+  }
+
+  let specific_ss_title = document.createElement("div");
+  specific_ss_title.classList.add("title");
+  specific_ss_title.appendChild(document.createTextNode("Individual"));
+  specific_subsection.appendChild(specific_ss_title);
+
   for (let div of specific_here) {
     specific_subsection.appendChild(div);
   }
@@ -1710,13 +1737,43 @@ function weave_category(category, rubric, feedback, prefix) {
   add_note.addEventListener(
     "click",
     function () {
-      specific_subsection.appendChild(
-        create_note_creator(section)
+      section.insertBefore(
+        create_note_creator(section),
+        add_note
       );
     }
   );
   section.appendChild(add_note);
   section.appendChild(document.createElement("br"));
+
+  // External notes:
+  // (they come after the add button because they can't be modified)
+  if (feedback.externals) {
+    for (let ext of Object.keys(feedback.externals)) {
+      let ext_subsection = document.createElement("div");
+      ext_subsection.classList.add("notes");
+      ext_subsection.classList.add("external");
+      if (
+        !external_here.hasOwnProperty(ext)
+     || external_here[ext].length == 0
+      ) {
+        ext_subsection.classList.add("empty");
+      }
+
+      let ext_ss_title = document.createElement("div");
+      ext_ss_title.classList.add("title");
+      ext_ss_title.appendChild(document.createTextNode(ext));
+      ext_subsection.appendChild(ext_ss_title);
+
+      if (external_here.hasOwnProperty(ext)) {
+        for (let note_div of external_here[ext]) {
+          ext_subsection.appendChild(note_div);
+        }
+      }
+
+      section.appendChild(ext_subsection);
+    }
+  }
 
   // Add category button:
   let add_category = document.createElement("input");
@@ -1753,7 +1810,7 @@ function get_parent_section(note_div) {
   return note_div.parentNode.parentNode;
 }
 
-function weave_note(note, address, id, disabled) {
+function weave_note(note, address, id, disabled, external) {
   /*
    * Takes a note object (either a specific note or a note item looked up from
    * a rubric) and creates an HTML DOM element for that note, rigging the
@@ -1800,19 +1857,22 @@ function weave_note(note, address, id, disabled) {
   }
 
   // Create an edit button for this note:
-  let edit = document.createElement("button");
-  edit.classList.add("edit-button");
-  edit.classList.add("square-button");
-  edit.appendChild(document.createTextNode("✎"));
-  edit.addEventListener(
-    "click",
-    function () {
-      edit.disabled = true;
-      let editor = create_note_editor(note_div);
-      note_div.parentNode.insertBefore(editor, note_div.nextSibling);
-    }
-  );
-  note_div.appendChild(edit);
+  let edit;
+  if (!external) {
+    edit = document.createElement("button");
+    edit.classList.add("edit-button");
+    edit.classList.add("square-button");
+    edit.appendChild(document.createTextNode("✎"));
+    edit.addEventListener(
+      "click",
+      function () {
+        edit.disabled = true;
+        let editor = create_note_editor(note_div);
+        note_div.parentNode.insertBefore(editor, note_div.nextSibling);
+      }
+    );
+    note_div.appendChild(edit);
+  }
 
   // Create a toggle box for this note:
   let toggle = document.createElement("input");
@@ -2047,6 +2107,7 @@ function create_note_creator(section) {
           // Add a div to our section:
           let specific = get_specific_subsection(section);
           specific.appendChild(weave_note(new_note, addr, undefined, false));
+          specific.classList.remove("empty");
 
           // Mark the feedback as dirty:
           set_progress("active");
@@ -2072,6 +2133,7 @@ function create_note_creator(section) {
 
           let common = get_common_subsection(section);
           common.appendChild(weave_note(new_note, addr, id, false));
+          common.classList.remove("empty");
 
           // Mark the feedback and rubric as dirty:
           set_progress("active");
@@ -2280,7 +2342,12 @@ function create_note_editor(note_div) {
         if (del_box.checked) {
           if (specific) { // no need to confirm
               // Remove note div:
-              note_div.parentNode.removeChild(note_div);
+              let notes_category = note_div.parentNode;
+              notes_category.removeChild(note_div);
+              // If only the title div and the editor are left:
+              if (notes_category.children.length <= 2) {
+                notes_category.classList.add("empty");
+              }
 
               // Remove note from feedback:
               nspec = [];
@@ -2304,7 +2371,12 @@ function create_note_editor(note_div) {
               )
             ) {
               // Remove note div:
-              note_div.parentNode.removeChild(note_div);
+              let notes_category = note_div.parentNode;
+              notes_category.removeChild(note_div);
+              // If only the title div and the editor are left:
+              if (notes_category.children.length <= 2) {
+                notes_category.classList.add("empty");
+              }
 
               // Mark note as deleted:
               let cat = lookup_category(rubric, addr);

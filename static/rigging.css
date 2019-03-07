@@ -259,3 +259,20 @@ input.disabled {
 .dialog-buttons {
   text-align: center;
 }
+
+.title {
+  font-weight: bold;
+}
+
+.empty {
+  display: none;
+}
+
+.notes {
+  border-left: 1.5pt solid black;
+  border-top: 1.5pt solid black;
+  border-radius: 3pt;
+  margin-bottom: 2pt;
+  padding-left: 2pt;
+  margin-right: 2pt;
+}
