@@ -1,7 +1,41 @@
 import flask
 import os
+import posixpath
 import json
 import sys
+import collections
+
+# First, load plugins via plugins/__main__.py
+from . import plugins
+
+PLUGINS = collections.OrderedDict()
+for plugin in plugins.ALL:
+  name = getattr(plugin, "NAME", plugin.__name__)
+  css_files = getattr(plugin, "CSS", [])
+  js_files = getattr(plugin, "JS", [])
+  base = os.path.dirname(plugin.__file__)
+
+  # Read CSS files since we won't serve them directly from plugins directory:
+  css = []
+  for f in css_files:
+    with open(os.path.join(base, *posixpath.split(f)), 'r') as fin:
+      css.append(fin.read())
+
+  # Read JS files since we won't serve them directly from plugins directory:
+  js = []
+  for f in js_files:
+    with open(os.path.join(base, *posixpath.split(f)), 'r') as fin:
+      js.append(fin.read())
+
+  connect = getattr(plugin, "plug_in", None)
+
+  PLUGINS[name] = {
+    'path': base,
+    'css': css,
+    'js': js,
+    'connect': connect,
+  }
+  # Note: final activation happens after standard routes are defined
 
 app = flask.Flask(__name__)
 
@@ -26,7 +60,7 @@ def evaluate():
     flask.flash("Please log in first.")
     return flask.redirect(flask.url_for("login"))
   else:
-    return flask.render_template("rigging.html")
+    return flask.render_template("rigging.html", plugins=PLUGINS)
 
 FN_BAD = '\\/:*?"<>|~'
 
@@ -220,3 +254,8 @@ def logout():
   flask.session.pop("username", None)
   flask.flash("You have been logged out. Please log in again to continue.")
   return flask.redirect(flask.url_for("login"))
+
+# Finally, finalize plugin activation:
+for name in PLUGINS:
+  if PLUGINS[name]['connect']:
+    PLUGINS[name]['connect'](app, globals())

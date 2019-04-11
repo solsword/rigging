@@ -1,14 +1,32 @@
+// Cache variables for the roster, assignment info, rubrics, feedback objects,
+// and submission objects. Except the submission objects, each of these comes
+// from a file on disk.
 var ROSTER = undefined;
 var ASG_INFO = undefined;
 var RUBRICS = {};
 var FEEDBACK = {};
 var SUBMISSIONS = {};
 
+// Cache for points values by student/address
 var POINTS = {};
+
+// The submission object that's currently being viewed
 var CURRENTLY_DISPLAYED = undefined;
+
+// The base path for loading files
 var BASE_PATH = "static/content"
+
+// Variable that holds combined dirty status across all rubrics/feedback to
+// help decide whether the save changes button should be active.
 var ANY_DIRTY = false;
+
+// Keeps track of which rubrics and/or feedbacks are being uploaded to the
+// server right now.
 var SAVE_IN_FLIGHT = undefined;
+
+// Mapping from names to functions that take a submission object and add notes
+// to the 'externals' property of its associated feedback object.
+var EXTERNALS = {};
 
 // Callback queues
 var QUEUES = {
@@ -19,6 +37,7 @@ var QUEUES = {
   "submissions": {}
 };
 
+// The various note categories
 var CATEGORIES = [
   "crash",
   "behavior",
@@ -28,6 +47,7 @@ var CATEGORIES = [
   "info"
 ];
 
+// The various note severities
 var SEVERITIES = [
   'critical',
   'major',
@@ -38,6 +58,7 @@ var SEVERITIES = [
   'note'
 ];
 
+// The meanings of each note category
 var CATEGORY_LEGEND = {
   'crash': 'serious issue that interferes with other checks',
   'behavior': 'code does not behave correctly when tested',
@@ -47,6 +68,7 @@ var CATEGORY_LEGEND = {
   'info': 'informational note; not an issue'
 }
 
+// The meanings of each note severity
 var SEVERITY_LEGEND = {
   'critical': 'a very serious issue; usually worth at least five points',
   'major': 'an important issue; usually worth one to three point(s)',
@@ -57,13 +79,36 @@ var SEVERITY_LEGEND = {
   'note': 'just an informative note; not worth points'
 }
 
+function check_missing_files(submission, notes) {
+  // Built-in 'external' that deducts points for missing files.
+  for (let file of submission.filenames) {
+    let sub = submission.files[file];
+    if (sub.submitted == false) {
+      notes.push(
+        {
+          "item": submission.task,
+          "category": "crash",
+          "severity": "critical",
+          "description": "We couldn't find your file '" + sub.filename + "'!",
+          "adjust": -1000 // TODO: This value?!?
+        }
+      );
+    }
+  }
+}
+
+// Add check_missing_files as an external
+EXTERNALS['Missing Files'] = check_missing_files;
+
+// Load extra externals
+// TODO: HERE!
+// Note: do this in pipeline from window.onload below: we don't want to load
+// any submissions before externals have been loaded!
+
 /*
  * Get stuff going:
  */
 window.onload = function() {
-  // Test:
-  // document.getElementById("evaluation").appendChild(weave(task1));
-
   with_asg_info(
     function (info) {
       init_controls(info);
@@ -383,26 +428,17 @@ function continue_loading_submission(
 }
 
 function finalize_submission_info(info) {
+  // After attempts have been made to load each of the files associated with a
+  // submission, this function takes the submission_info object and processes
+  // any externals, removing old externals entries from the associated feedback
+  // and replacing them with new notes. It also sets the .status field
+  // depending on whether no/some/all files are missing.
   let all_submitted = true;
   let none_submitted = true;
   for (let file of info.filenames) {
     let sub = info.files[file];
     if (sub.submitted == false) {
       all_submitted = false;
-      if (info.feedback.progress == "pre-fresh") {
-        if (!info.feedback.externals.hasOwnProperty('Missing Files')) {
-          info.feedback.externals['Missing Files'] = [];
-        }
-        info.feedback.externals['Missing Files'].push(
-          {
-            "item": info.task,
-            "category": "crash",
-            "severity": "critical",
-            "description": "We couldn't find your file '" + sub.filename + "'!",
-            "adjust": -1000 // TODO: This value?!?
-          }
-        );
-      }
     } else {
       none_submitted = false;
     }
@@ -412,6 +448,9 @@ function finalize_submission_info(info) {
   } else if (none_submitted) {
     info.status = "missing"
   }
+  for (let ext of Object.keys(EXTERNALS)) {
+    run_external(info, ext);
+  }
   if (info.feedback.progress == "pre-fresh") {
     info.feedback.progress = "fresh";
   }
@@ -420,6 +459,35 @@ function finalize_submission_info(info) {
     cb(info);
   }
   delete QUEUES.submissions[info.asg][info.task][info.student];
+}
+
+function run_external(submission, ext) {
+  // Removes any old notes from the given external and re-runs the external on
+  // the given submission. The external is given the submission object, and an
+  // array where it should add any notes it generates.
+  let extfn = EXTERNALS[ext];
+  if (!submission.feedback.hasOwnProperty('externals')) {
+    submission.feedback.externals = {};
+  }
+  submission.feedback.externals[ext] = [];
+  extfn(submission, submission.feedback.externals[ext]);
+}
+
+function reload_submission(submission, callback) {
+  let asg = submission.asg;
+  let task = submission.task;
+  let student = submission.student;
+  if (SUBMISSIONS[asg][task][student] != submission) {
+    console.warn("Attept to reload mistmatched or unloaded submission:");
+    console.warn(submission);
+    return;
+  }
+
+  // Remove cached copy (submission_info objects aren't stored on disk anywhere)
+  delete SUBMISSIONS[asg][task][student];
+
+  // Re-create submission object and hand it to the callback.
+  with_submission(asg, task, student, callback);
 }
 
 
@@ -1523,6 +1591,18 @@ function weave(submission) {
   let progress = document.createElement("div");
   progress.classList.add("progress");
   progress.classList.add("progress-" + feedback.progress);
+
+  reprocess_button = document.createElement("input");
+  reprocess_button.type = "button";
+  reprocess_button.value = "Reprocess";
+  reprocess_button.addEventListener(
+    "click",
+    function () {
+      let submission = CURRENTLY_DISPLAYED;
+      display_submission(submission);
+    }
+  );
+  progress.appendChild(reprocess_button);
 
   let clean = document.createElement("span");
   clean.id = "feedback_clean";
@@ -2746,7 +2826,8 @@ function create_restore_dialog() {
 
   dialog.appendChild(
     document.createTextNode(
-      "Use the upload button to upload a dump file created using the 'Dump JSON' button."
+      "Use the upload button to upload a dump file created using the 'Dump "
+    + "JSON' button."
     )
   );
   dialog.appendChild(document.createElement("br"));

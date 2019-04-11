@@ -2,6 +2,18 @@
 {% block head %}
 <link rel="stylesheet" type="text/css" href="/static/rigging.css">
 <script src="/static/rigging.js" type="text/javascript"></script>
+{% for name, plugin in plugins.items() %}
+  {% for css in plugin.css %}
+    <style type="text/css">
+{{css|safe}}
+    </style>
+  {% endfor %}
+  {% for js in plugin.js %}
+    <script type="text/javascript">
+{{js|safe}}
+    </script>
+  {% endfor %}
+{% endfor %}
 {% endblock %}
 {% block body %}
 <div id="controls">
