@@ -127,7 +127,7 @@ def carefully_overwrite(target, obj):
 
   return True
 
-@app.route("/upload/rubric/<asg>/<task>", methods=["POST"])
+@app.route("/upload/rubric/<string:asg>/<string:task>", methods=["POST"])
 def upload_rubric(asg, task):
   """
   Accepts rubric JSON via post (TODO: only accept w/ proper MIME type) and
@@ -171,7 +171,10 @@ def upload_rubric(asg, task):
     else:
       return "Upload aborted", 500
 
-@app.route("/upload/feedback/<asg>/<task>/<student>", methods=["POST"])
+@app.route(
+  "/upload/feedback/<string:asg>/<string:task>/<string:student>",
+  methods=["POST"]
+)
 def upload_feedback(asg, task, student):
   """
   Accepts feedback JSON via post (TODO: only accept w/ proper MIME type) and

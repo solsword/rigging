@@ -9,7 +9,7 @@ feedback if Codder takes too long to run.
 """
 
 # Plugin configuration variables
-NAME="Codder" # name of external section for notes from this plugin
+NAME="Codder" # name of this plugin
 JS=["codder.js"] # Extra JavaScript file(s) to load (relative to plugin folder)
 CSS=[] # Extra CSS files to load (relative to plugin folder)
 
@@ -31,4 +31,11 @@ def plug_in(app, globals):
   auto-grade requests for particular files and sending the results back to the
   requester. Note that each Codder request can take 10+ *seconds* to run.
   """
-  # TODO: HERE
+  # New route for requesting Codder evaluation of a file
+  @app.route(
+    "/plugins/codder/<string:pset>/<string:task>/<string:student>",
+    methods=["GET", "POST"]
+  )
+  def request_codder_eval(pset, task, student):
+    pass
+    # TODO: HERE!

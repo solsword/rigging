@@ -1,6 +1,13 @@
 {% extends "layout.html" %}
 {% block head %}
 <link rel="stylesheet" type="text/css" href="/static/rigging.css">
+<script type="text/javascript">
+PLUGINS = [
+{% for name in plugins %}
+  "{{name}}",
+{% endfor %}
+];
+</script>
 <script src="/static/rigging.js" type="text/javascript"></script>
 {% for name, plugin in plugins.items() %}
   {% for css in plugin.css %}

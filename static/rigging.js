@@ -28,8 +28,20 @@ var SAVE_IN_FLIGHT = undefined;
 // to the 'externals' property of its associated feedback object.
 var EXTERNALS = {};
 
+
+// Mapping from plugin names to true/false to indicate whether they've been
+// loaded or not.
+var PLUGIN_STATUS = {}
+
+// Initialize PLUGIN_STATUS object from PLUGINS list-of-names (see
+// rigging.html for definition of PLUGINS global).
+for (let name of PLUGINS) {
+  PLUGIN_STATUS[name] = false;
+}
+
 // Callback queues
 var QUEUES = {
+  "plugins": [],
   "roster": undefined,
   "asg_info": undefined,
   "rubrics": {},
@@ -79,7 +91,8 @@ var SEVERITY_LEGEND = {
   'note': 'just an informative note; not worth points'
 }
 
-function check_missing_files(submission, notes) {
+function check_missing_files(submission, callback) {
+  let notes = [];
   // Built-in 'external' that deducts points for missing files.
   for (let file of submission.filenames) {
     let sub = submission.files[file];
@@ -95,26 +108,78 @@ function check_missing_files(submission, notes) {
       );
     }
   }
+  callback(notes);
 }
 
 // Add check_missing_files as an external
 EXTERNALS['Missing Files'] = check_missing_files;
 
-// Load extra externals
-// TODO: HERE!
-// Note: do this in pipeline from window.onload below: we don't want to load
-// any submissions before externals have been loaded!
+// Note: extra EXTERNALS can be registered via plugins by simply adding keys to
+// the EXTERNALS variable.
 
 /*
  * Get stuff going:
  */
 window.onload = function() {
-  with_asg_info(
-    function (info) {
-      init_controls(info);
-      update_task_select();
+  wait_for_plugins(
+    function () {
+      with_asg_info(
+        function (info) {
+          init_controls(info);
+          update_task_select();
+        }
+      );
     }
   );
+}
+
+/*
+ * Register a plugin with the given name. Should be called only once/plugin.
+ * This function calls the given callback and afterwards sets the loaded status
+ * of that plugin to true.
+ */
+function register_plugin(name, reg) {
+  // Call the registration function with continuation:
+  reg(
+    function () {
+      // Set the loaded status of this plugin to true.
+      PLUGIN_STATUS[name] = true;
+      // Figure out whether this was the last plugin to be loaded:
+      let ready = true;
+      for (let name of Object.keys(PLUGIN_STATUS)) {
+        if (PLUGIN_STATUS[name] != true) {
+          ready = false;
+          break;
+        }
+      }
+      if (ready) {
+        // Until the queue is empty...
+        while (QUEUES.plugins.length > 0) {
+          // Pop and call a callback from the queue:
+          QUEUES.plugins.pop()();
+        }
+      } // else do nothing (a later call to register_plugin will trigger things)
+    }
+  );
+}
+
+/*
+ * Do something after all plugins are loaded.
+ */
+function wait_for_plugins(callback) {
+  let ready = true;
+  for (let name of Object.keys(PLUGIN_STATUS)) {
+    if (PLUGIN_STATUS[name] != true) {
+      ready = false;
+      break;
+    }
+  }
+
+  if (ready) {
+    callback();
+  } else {
+    QUEUES.plugins.push(callback);
+  }
 }
 
 /*
@@ -429,7 +494,7 @@ function continue_loading_submission(
 
 function finalize_submission_info(info) {
   // After attempts have been made to load each of the files associated with a
-  // submission, this function takes the submission_info object and processes
+  // submission, this function takes the submission_info object and launches
   // any externals, removing old externals entries from the associated feedback
   // and replacing them with new notes. It also sets the .status field
   // depending on whether no/some/all files are missing.
@@ -448,9 +513,7 @@ function finalize_submission_info(info) {
   } else if (none_submitted) {
     info.status = "missing"
   }
-  for (let ext of Object.keys(EXTERNALS)) {
-    run_external(info, ext);
-  }
+  launch_all_externals(info)
   if (info.feedback.progress == "pre-fresh") {
     info.feedback.progress = "fresh";
   }
@@ -461,7 +524,13 @@ function finalize_submission_info(info) {
   delete QUEUES.submissions[info.asg][info.task][info.student];
 }
 
-function run_external(submission, ext) {
+function launch_all_externals(submission) {
+  for (let ext of Object.keys(EXTERNALS)) {
+    launch_external(submission, ext);
+  }
+}
+
+function launch_external(submission, ext) {
   // Removes any old notes from the given external and re-runs the external on
   // the given submission. The external is given the submission object, and an
   // array where it should add any notes it generates.
@@ -469,8 +538,24 @@ function run_external(submission, ext) {
   if (!submission.feedback.hasOwnProperty('externals')) {
     submission.feedback.externals = {};
   }
-  submission.feedback.externals[ext] = [];
-  extfn(submission, submission.feedback.externals[ext]);
+  submission.feedback.externals[ext] = [
+    {
+      "item": submission.task,
+      "category": "note",
+      "severity": "info",
+      "description":
+        "<img src='/static/loading.gif' alt='loading image'> Running '" + ext
+      + "' analysis... ",
+      "adjust": 0
+    }
+  ];
+  extfn(
+    submission,
+    function (notes) {
+      submission.feedback.externals[ext] = notes;
+      refresh_display();
+    }
+  );
 }
 
 function reload_submission(submission, callback) {
@@ -1968,7 +2053,7 @@ function weave_note(note, address, id, disabled, external) {
   // Description span:
   let desc = document.createElement("span");
   // TODO: Process line number refs here?
-  desc.appendChild(document.createTextNode(note.description));
+  desc.innerHTML = note.description;
   desc.classList.add("note-description");
   note_div.appendChild(desc);
 
@@ -2852,7 +2937,7 @@ function create_restore_dialog() {
   do_button.disabled = true;
 
   let loading_img = document.createElement("img");
-  loading_img.src = "loading.gif";
+  loading_img.src = "/static/loading.gif";
   loading_img.alt = "loading";
 
   let done_msg = document.createElement("div");
